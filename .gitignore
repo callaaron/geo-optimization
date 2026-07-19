@@ -1,0 +1,35 @@
+# ===== Dependencies =====
+node_modules/
+app/node_modules/
+
+# ===== Build output =====
+dist/
+app/dist/
+build/
+*.tsbuildinfo
+
+# ===== Secrets / env =====
+.env
+.env.local
+.env.*.local
+app/.env
+app/.env.local
+# Keep the template, ignore the real secrets
+!.env.example
+!app/.env.example
+
+# ===== Runtime data (generated, not source) =====
+data/
+app/data/
+*.log
+npm-debug.log*
+
+# ===== OS / editor =====
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# ===== WorkBuddy internal =====
+.workbuddy/
