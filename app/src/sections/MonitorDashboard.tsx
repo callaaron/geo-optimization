@@ -18,6 +18,8 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { EmptyState } from "@/components/EmptyState"
+import { Compass } from "lucide-react"
 import { toast } from "sonner"
 import {
   Search,
@@ -57,6 +59,12 @@ function relevanceColor(v: number) {
   return "#ef4444"
 }
 
+function gradeColor(g?: string) {
+  if (g === "A") return "#10b981"
+  if (g === "B") return "#f59e0b"
+  return "#ef4444"
+}
+
 function RelevanceBar({ value }: { value: number }) {
   return (
     <div className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-muted">
@@ -76,27 +84,68 @@ function StatusBadge({ status }: { status: ContentPointTracking["status"] }) {
   return <Badge className="bg-destructive/20 text-destructive text-[10px]">未出现</Badge>
 }
 
-function SourceRow({ s }: { s: GeoAuditSource }) {
+const SCORE_DIMS: { key: string; label: string }[] = [
+  { key: "relevance", label: "相关性" },
+  { key: "authority", label: "权威度" },
+  { key: "freshness", label: "时效性" },
+  { key: "completeness", label: "完整度" },
+  { key: "quotability", label: "可引用性" },
+]
+
+function ScoreBar({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex items-center gap-3 rounded-md border border-border/60 px-3 py-2">
-      <span className="w-5 shrink-0 text-center text-xs font-bold tabular-nums text-muted-foreground">
-        {s.rank}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{s.title}</p>
-        <p className="truncate text-xs text-muted-foreground">{s.url}</p>
+    <div className="flex items-center gap-2 text-xs">
+      <span className="w-14 shrink-0 text-muted-foreground">{label}</span>
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full" style={{ width: `${value}%`, background: relevanceColor(value) }} />
       </div>
-      {s.citedByAi ? (
-        <Badge className="shrink-0 bg-violet-500/20 text-violet-300 text-[10px]">被 AI 引用</Badge>
-      ) : (
-        <Badge variant="secondary" className="shrink-0 text-[10px]">未引用</Badge>
+      <span className="w-7 text-right tabular-nums" style={{ color: relevanceColor(value) }}>{value}</span>
+    </div>
+  )
+}
+
+function SourceRow({ s }: { s: GeoAuditSource }) {
+  const [open, setOpen] = useState(false)
+  const grade = s.qualityGrade
+  const score = s.overallScore ?? s.relevance
+  return (
+    <div className="rounded-md border border-border/60">
+      <button
+        className="flex w-full items-center gap-3 px-3 py-2 text-left"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span className="w-5 shrink-0 text-center text-xs font-bold tabular-nums text-muted-foreground">{s.rank}</span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">{s.title}</p>
+          <p className="truncate text-xs text-muted-foreground">{s.url}</p>
+        </div>
+        {grade && (
+          <span
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold"
+            style={{ background: `${gradeColor(grade)}22`, color: gradeColor(grade) }}
+            title={`内容质量评级 ${grade}`}
+          >
+            {grade}
+          </span>
+        )}
+        {s.citedByAi ? (
+          <Badge className="shrink-0 bg-violet-500/20 text-violet-300 text-[10px]">被 AI 引用</Badge>
+        ) : (
+          <Badge variant="secondary" className="shrink-0 text-[10px]">未引用</Badge>
+        )}
+        <div className="flex shrink-0 items-center gap-2">
+          <RelevanceBar value={s.relevance} />
+          <span className="w-8 text-right text-xs tabular-nums" style={{ color: relevanceColor(s.relevance) }}>{s.relevance}</span>
+        </div>
+      </button>
+      {open && s.scores && (
+        <div className="space-y-1.5 border-t border-border/60 px-3 py-2.5">
+          <p className="text-[10px] font-medium text-muted-foreground">5 维内容质量评分（综合 {score}）</p>
+          {SCORE_DIMS.map((d) => (
+            <ScoreBar key={d.key} label={d.label} value={s.scores![d.key] ?? 0} />
+          ))}
+        </div>
       )}
-      <div className="flex shrink-0 items-center gap-2">
-        <RelevanceBar value={s.relevance} />
-        <span className="w-8 text-right text-xs tabular-nums" style={{ color: relevanceColor(s.relevance) }}>
-          {s.relevance}
-        </span>
-      </div>
     </div>
   )
 }
@@ -392,7 +441,7 @@ export function MonitorDashboard() {
         </CardContent>
       </Card>
 
-      {result && (
+      {result ? (
         <>
           {/* 汇总指标 */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -601,6 +650,13 @@ export function MonitorDashboard() {
             </Button>
           </div>
         </>
+      ) : (
+        <EmptyState
+          icon={<Compass className="h-8 w-8" />}
+          title="尚未运行监测"
+          desc="填写上方「企业监测配置」后点击「运行监测」，即可查看搜索可见度、AI 引用率与信源质量评分。"
+          hint="提示：左侧智能输入面板可粘贴简介一键补全品牌与 query"
+        />
       )}
     </div>
   )

@@ -6,7 +6,7 @@ import { readFile, stat } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 import { dirname, join, extname, normalize } from "node:path"
 import { isConfigured, searchConfigured, SEARCH, CONFIG } from "./ark.mjs"
-import { aiAnalyze, aiRewrite, aiCitation, aiGeoAudit, aiContentGap } from "./ai.mjs"
+import { aiAnalyze, aiRewrite, aiCitation, aiGeoAudit, aiContentGap, aiExtractProfile, aiSuggest, aiGenerateContent } from "./ai.mjs"
 import {
   listProjects,
   getProject,
@@ -16,6 +16,8 @@ import {
   addAudit,
 } from "./project.mjs"
 import { buildAuditReport } from "./report.mjs"
+import { extractFileText, readMultipart } from "./upload.mjs"
+import { scoreSources } from "./scorer.mjs"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DIST = join(__dirname, "..", "dist")
@@ -117,6 +119,7 @@ const server = createServer(async (req, res) => {
         return sendJson(res, 200, {
           ok: true,
           configured: isConfigured(),
+          provider: CONFIG.provider, // 当前文字模型供应商：deepseek | ark
           model: CONFIG.model,
           baseUrl: CONFIG.baseUrl,
           searchConfigured: searchConfigured(), // 联网真监测是否已配置
@@ -157,8 +160,19 @@ const server = createServer(async (req, res) => {
         return sendJson(res, 200, { ok: true })
       }
 
+      // ── 文件上传（不需要 AI key） ──
+      if (pathname === "/api/upload" && req.method === "POST") {
+        const { files } = await readMultipart(req)
+        if (!files.length) return sendJson(res, 400, { ok: false, error: "未上传文件" })
+        const result = await extractFileText(files[0])
+        return sendJson(res, 200, { ok: true, data: result })
+      }
+
       if (!isConfigured()) {
-        return sendJson(res, 503, { ok: false, error: "后端未配置 ARK_API_KEY" })
+        return sendJson(res, 503, {
+          ok: false,
+          error: `后端未配置文字模型 Key（${CONFIG.provider === "deepseek" ? "DEEPSEEK_API_KEY" : "ARK_API_KEY"}）`,
+        })
       }
 
       if (pathname === "/api/ai/analyze" && req.method === "POST") {
@@ -282,6 +296,31 @@ const server = createServer(async (req, res) => {
         return sendJson(res, 200, { ok: true, data: { html } })
       }
 
+      // ── 智能输入 / 多格式输出（需要 AI key） ──
+      if (pathname === "/api/ai/extract-profile" && req.method === "POST") {
+        const body = await readBody(req)
+        if (!body.text || !String(body.text).trim())
+          return sendJson(res, 400, { ok: false, error: "缺少 text" })
+        const data = await aiExtractProfile(body)
+        return sendJson(res, 200, { ok: true, data })
+      }
+
+      if (pathname === "/api/ai/suggest" && req.method === "POST") {
+        const body = await readBody(req)
+        if (!body.brand || !String(body.brand).trim())
+          return sendJson(res, 400, { ok: false, error: "缺少 brand" })
+        const data = await aiSuggest(body)
+        return sendJson(res, 200, { ok: true, data })
+      }
+
+      if (pathname === "/api/ai/generate-content" && req.method === "POST") {
+        const body = await readBody(req)
+        if (!body.text || !String(body.text).trim())
+          return sendJson(res, 400, { ok: false, error: "缺少 text" })
+        const data = await aiGenerateContent(body)
+        return sendJson(res, 200, { ok: true, data })
+      }
+
       return sendJson(res, 404, { ok: false, error: "未知接口" })
     } catch (err) {
       return sendJson(res, 500, { ok: false, error: String(err?.message || err) })
@@ -294,5 +333,5 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`[GEO AI] 服务已启动: http://localhost:${PORT}`)
-  console.log(`[GEO AI] Ark 配置: ${isConfigured() ? "已就绪 ✅" : "未配置 ARK_API_KEY ⚠️"} | 模型 ${CONFIG.model}`)
+  console.log(`[GEO AI] 文字模型: ${isConfigured() ? "已就绪 ✅" : "未配置 ⚠️"} | 供应商 ${CONFIG.provider} | 模型 ${CONFIG.model} | ${CONFIG.baseUrl}`)
 })

@@ -24,6 +24,10 @@ app/data/
 *.log
 npm-debug.log*
 
+# ===== Runtime artifacts (pid / lock files) =====
+*.pid
+geo-server.pid
+
 # ===== OS / editor =====
 .DS_Store
 Thumbs.db

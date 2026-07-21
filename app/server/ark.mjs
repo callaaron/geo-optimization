@@ -31,11 +31,31 @@ function loadEnv() {
 
 const ENV = loadEnv()
 
-export const CONFIG = {
+// ── 文字类主 LLM 供应商 ──
+// 支持 deepseek（OpenAI 兼容接口）与 ark（火山方舟 Agent Plan 套餐路径）。
+// 通过 LLM_PROVIDER 选择；未显式设置时：有 DeepSeek key 则用 deepseek，否则回退 ark。
+export const DEEPSEEK = {
+  baseUrl: ENV.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+  apiKey: ENV.DEEPSEEK_API_KEY || "",
+  model: ENV.DEEPSEEK_MODEL || "deepseek-v4-pro",
+  // v4-pro 为思考型模型，默认开启思维链；DEEPSEEK_THINKING=off 可关闭
+  thinking: (ENV.DEEPSEEK_THINKING || "enabled").toLowerCase() !== "off",
+  reasoningEffort: ENV.DEEPSEEK_REASONING_EFFORT || "high",
+}
+
+export const ARK = {
   baseUrl: ENV.ARK_PLAN_BASE_URL || "https://ark.cn-beijing.volces.com/api/plan",
   apiKey: ENV.ARK_API_KEY || "",
   model: ENV.ARK_LLM_MODEL || "ark-code-latest",
 }
+
+export const PROVIDER = (ENV.LLM_PROVIDER || (DEEPSEEK.apiKey ? "deepseek" : "ark")).toLowerCase()
+
+// CONFIG 指向「当前生效的文字模型」，兼容既有代码（index.mjs 读取 CONFIG.model/baseUrl）
+export const CONFIG =
+  PROVIDER === "deepseek"
+    ? { provider: "deepseek", baseUrl: DEEPSEEK.baseUrl, apiKey: DEEPSEEK.apiKey, model: DEEPSEEK.model }
+    : { provider: "ark", baseUrl: ARK.baseUrl, apiKey: ARK.apiKey, model: ARK.model }
 
 export function isConfigured() {
   return !!CONFIG.apiKey
@@ -59,46 +79,70 @@ export function searchConfigured() {
  * @param {{system?:string, user:string, temperature?:number, maxTokens?:number, timeoutMs?:number}} opts
  * @returns {Promise<string>} 模型文本输出
  */
-export async function chat(opts) {
-  if (!CONFIG.apiKey) throw new Error("ARK_API_KEY 未配置")
-  const { system, user, temperature = 0.4, maxTokens = 1600, timeoutMs = 60000 } = opts
-  const messages = []
-  if (system) messages.push({ role: "system", content: system })
-  messages.push({ role: "user", content: user })
-
+// 通用 OpenAI 兼容 chat 调用（DeepSeek / Ark 共用）
+async function callChat(url, apiKey, body, timeoutMs, label) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const resp = await fetch(`${CONFIG.baseUrl}/v3/chat/completions`, {
+    const resp = await fetch(url, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${CONFIG.apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: CONFIG.model,
-        messages,
-        temperature,
-        max_tokens: maxTokens,
-      }),
+      body: JSON.stringify(body),
       signal: controller.signal,
     })
     const rawText = await resp.text()
     if (!resp.ok) {
-      throw new Error(`Ark ${resp.status}: ${rawText.slice(0, 300)}`)
+      throw new Error(`${label} ${resp.status}: ${rawText.slice(0, 300)}`)
     }
     let data
     try {
       data = JSON.parse(rawText)
     } catch {
-      throw new Error(`Ark 返回非 JSON: ${rawText.slice(0, 200)}`)
+      throw new Error(`${label} 返回非 JSON: ${rawText.slice(0, 200)}`)
     }
     const content = data?.choices?.[0]?.message?.content
-    if (typeof content !== "string") throw new Error("Ark 返回缺少 content")
+    if (typeof content !== "string") throw new Error(`${label} 返回缺少 content`)
     return content
   } finally {
     clearTimeout(timer)
   }
+}
+
+/**
+ * 调用文字类主 LLM。根据 PROVIDER 路由到 DeepSeek（OpenAI 兼容）或 Ark（Agent Plan 套餐路径）。
+ * @param {{system?:string, user:string, temperature?:number, maxTokens?:number, timeoutMs?:number}} opts
+ * @returns {Promise<string>} 模型文本输出
+ */
+export async function chat(opts) {
+  if (!CONFIG.apiKey) {
+    throw new Error(`${CONFIG.provider === "deepseek" ? "DEEPSEEK_API_KEY" : "ARK_API_KEY"} 未配置`)
+  }
+  const { system, user, temperature = 0.4, maxTokens = 1600 } = opts
+  const messages = []
+  if (system) messages.push({ role: "system", content: system })
+  messages.push({ role: "user", content: user })
+
+  if (CONFIG.provider === "deepseek") {
+    // 思考型模型响应更慢，默认给到 120s 超时
+    const timeoutMs = opts.timeoutMs || 120000
+    const body = { model: CONFIG.model, messages, max_tokens: maxTokens }
+    if (DEEPSEEK.thinking) {
+      // 思考模式下 temperature 会被忽略/报错，故不下发；改用 reasoning_effort 控制思维强度
+      body.thinking = { type: "enabled" }
+      body.reasoning_effort = DEEPSEEK.reasoningEffort
+    } else {
+      body.temperature = temperature
+    }
+    return callChat(`${CONFIG.baseUrl}/chat/completions`, CONFIG.apiKey, body, timeoutMs, "DeepSeek")
+  }
+
+  // Ark Agent Plan：套餐路径 /api/plan/v3/chat/completions
+  const timeoutMs = opts.timeoutMs || 60000
+  const body = { model: CONFIG.model, messages, temperature, max_tokens: maxTokens }
+  return callChat(`${CONFIG.baseUrl}/v3/chat/completions`, CONFIG.apiKey, body, timeoutMs, "Ark")
 }
 
 /**

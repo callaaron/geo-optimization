@@ -4,6 +4,7 @@
 // 3) citation —— AI 认知覆盖度监测（问真实行业问题，检测品牌是否被 AI 提及）
 import { chat, chatJson, chatSearch, searchConfigured } from "./ark.mjs"
 import { webSearch, formatSearchContext } from "./search.mjs"
+import { scoreSource } from "./scorer.mjs"
 
 const clip = (s, n = 6000) => String(s || "").slice(0, n)
 
@@ -421,16 +422,24 @@ ${searchContext}
   // 6. 从 AI 回答中抽取品牌名
   const brandsInAnswer = [...new Set((aiAnswer || "").match(brandPattern) || [])]
 
-  // 7. 解析 AI 回答中的 [n] 引用 → 映射回 SERP 信源 → 生成"信源排名表"
+  // 7. 解析 AI 回答中的 [n] 引用 → 映射回 SERP 信源 → 生成"信源排名表"（使用新评分体系）
   const citedNums = parseCitations(aiAnswer)
-  const sources = results.slice(0, 6).map((r, i) => ({
-    rank: i + 1,
-    title: r.title,
-    url: r.url,
-    snippet: r.snippet || "",
-    citedByAi: citedNums.has(i + 1),
-    relevance: relevanceScore(aiAnswer, r.snippet),
-  }))
+  const sources = results.slice(0, 6).map((r, i) => {
+    const scoring = scoreSource({ query, title: r.title, snippet: r.snippet, url: r.url })
+    return {
+      rank: i + 1,
+      title: r.title,
+      url: r.url,
+      snippet: r.snippet || "",
+      citedByAi: citedNums.has(i + 1),
+      relevance: scoring.scores.relevance,
+      // ── 5 维质量评分（server/scorer.mjs）──
+      scores: scoring.scores,
+      overallScore: scoring.overall,
+      qualityLevel: scoring.level,
+      qualityGrade: scoring.grade,
+    }
+  })
 
   // 8. 内容点追踪：检测"企业想表达的内容"是否被 SERP / AI 收录
   const contentTracking = (Array.isArray(intendedContent) ? intendedContent : [])
@@ -572,4 +581,149 @@ ${auditSummary}
     gaps: arr(j?.gaps),
     suggestions: arr(j?.suggestions),
   }
+}
+
+// ── 智能输入：从文本中提取企业画像 ──
+/**
+ * 从用户上传/粘贴的公司简介中，用 LLM 提取结构化企业信息
+ * @param {{text:string}} input
+ * @returns {{brand, domain, industry, businessMode, queries[], competitors[], contentPoints[], summary}}
+ */
+export async function aiExtractProfile({ text }) {
+  const system =
+    "你是企业信息提取专家。从用户提供的公司/品牌介绍中提取关键结构化信息，用于 GEO 优化系统初始化。只输出 JSON，不要任何解释。"
+  const user = `请从以下企业/品牌介绍中提取信息：
+
+"""
+${clip(text, 6000)}
+"""
+
+只返回 JSON（中文），所有字段均为可选字符串或数组：
+{
+  "brand": "品牌/公司简称",
+  "domain": "官网域名（如果有）",
+  "industry": "所属行业分类（如：速冻食品/海鲜加工/B2B餐饮供应链）",
+  "businessMode": "general 或 b2b",
+  "queries": ["行业买家/用户可能搜索的精准 query（3-8 条）"],
+  "competitors": ["该行业知名竞品品牌（3-6 个）"],
+  "contentPoints": ["企业核心卖点/应被 AI 收录的关键信息点（4-8 条）"],
+  "summary": "一句话企业定位描述"
+}`
+  const json = await chatJson({ system, user, temperature: 0.3, maxTokens: 2000 })
+  const arr = (x) => (Array.isArray(x) ? x.filter((s) => typeof s === "string" && s.trim()) : [])
+  return {
+    brand: typeof json?.brand === "string" ? json.brand : "",
+    domain: typeof json?.domain === "string" ? json.domain : "",
+    industry: typeof json?.industry === "string" ? json.industry : "",
+    businessMode: json?.businessMode === "b2b" ? "b2b" : "general",
+    queries: arr(json?.queries),
+    competitors: arr(json?.competitors),
+    contentPoints: arr(json?.contentPoints),
+    summary: typeof json?.summary === "string" ? json.summary : "",
+  }
+}
+
+// ── 智能补全：仅需品牌名 → 推断所有衍生字段 ──
+/**
+ * @param {{brand:string, industry?:string}} input
+ * @returns {{industry, queries[], competitors[], contentPoints[]}}
+ */
+export async function aiSuggest({ brand, industry = "" }) {
+  const system =
+    "你是行业研究专家。给定一个品牌/公司名称，推断其所属行业、潜在买家会搜索的关键词、主要竞品、以及品牌应被 AI 引擎收录的核心内容点。只输出 JSON。"
+  const user = `品牌名称：${brand}${industry ? `\n所属行业（用户已指定）：${industry}` : ""}
+${
+  industry
+    ? ""
+    : "请先推断该品牌所属的具体行业。"
+}
+请只返回 JSON（中文）：
+{
+  "industry": "行业分类",
+  "queries": ["精准搜索 query（5-10 条）"],
+  "competitors": ["同行业知名竞品（4-8 个）"],
+  "contentPoints": ["品牌核心卖点/应被收录的关键信息（5-10 条）"]
+}`
+  const json = await chatJson({ system, user, temperature: 0.4, maxTokens: 2000 })
+  const arr = (x) => (Array.isArray(x) ? x.filter((s) => typeof s === "string" && s.trim()) : [])
+  return {
+    industry: typeof json?.industry === "string" ? json.industry : industry,
+    queries: arr(json?.queries),
+    competitors: arr(json?.competitors),
+    contentPoints: arr(json?.contentPoints),
+  }
+}
+
+// ── 多格式内容输出 ──
+/**
+ * 根据输出策略生成对应格式的内容
+ * @param {{text:string, title?:string, format:"article"|"social"|"video_script"|"landing", brand?:string}} opts
+ * @returns 对应格式的文本内容
+ */
+export async function aiGenerateContent({ text, title = "", format = "article", brand = "" }) {
+  const prompts = {
+    article: {
+      system: "你是资深新媒体编辑。把给定内容改写为适合公众号/知乎发布的图文文章。",
+      user: `请将以下内容改写为一篇适合公众号/知乎发布的高质量图文文章。${brand ? `品牌：${brand}。` : ""}
+标题：${title || "请根据内容生成吸引人的标题"}
+原文："""${clip(text, 4000)}"""
+
+返回 JSON（中文）：
+{
+  "title": "最终标题（15-25 字）",
+  "subtitle": "副标题/导语（1-2 句）",
+  "content": "正文（Markdown 格式，含 H2 小标题分段，每段 3-5 句，含 1 个 CTA 引导）",
+  "tags": ["3-5 个标签/话题"]
+}`,
+    },
+    social: {
+      system: "你是社交媒体运营专家。把内容改写为适合小红书/即刻发布的短文案。",
+      user: `请将以下内容改写为小红书风格的种草/科普笔记。${brand ? `品牌：${brand}。` : ""}
+原文："""${clip(text, 2000)}"""
+
+返回 JSON（中文）：
+{
+  "title": "笔记标题（含 emoji，15 字以内）",
+  "content": "正文（口语化，3-5 段，含 emoji 和话题标签 #）",
+  "imagePrompt": "配图建议（详细描述应该配什么图，用于 AI 生图提示词）"
+}`,
+    },
+    video_script: {
+      system: "你是短视频编剧。把内容改写为 60 秒口播脚本。",
+      user: `请将以下内容改写为一条 60 秒的短视频口播脚本。${brand ? `品牌：${brand}。` : ""}
+原文："""${clip(text, 2000)}"""
+
+返回 JSON（中文）：
+{
+  "title": "视频标题（吸引点击，15 字以内）",
+  "hook": "开头 hook（前 3 秒抓住注意力，10 字以内）",
+  "script": "完整口播稿（按时间分段，每段标注【画面建议】）",
+  "duration": "预计时长（秒）",
+  "cta": "结尾行动号召"
+}`,
+    },
+    landing: {
+      system: "你是 SEO/GEO 落地页设计师。根据品牌审计结果，生成官网落地页结构。",
+      user: `请为以下品牌生成一个官网落地页的页面结构。${brand ? `品牌：${brand}。` : ""}
+输入信息："""${clip(text, 4000)}"""
+
+返回 JSON（中文）：
+{
+  "pageTitle": "页面 <title>（含品牌+核心关键词）",
+  "metaDescription": "meta description（120-160 字）",
+  "sections": [
+    { "type": "hero", "headline": "...", "subheadline": "...", "cta": "..." },
+    { "type": "features", "title": "...", "items": ["..."] },
+    { "type": "faq", "title": "常见问题", "items": [{"q":"...","a":"..."}] },
+    { "type": "cta", "headline": "...", "button": "..." }
+  ],
+  "schemaType": "Organization 或 Product",
+  "keyEntities": ["应标记为 Schema 的实体列表"]
+}`,
+    },
+  }
+
+  const cfg = prompts[format] || prompts.article
+  const json = await chatJson({ system: cfg.system, user: cfg.user, temperature: 0.6, maxTokens: 4096 })
+  return json
 }

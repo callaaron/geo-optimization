@@ -113,7 +113,7 @@ export interface GeoAuditSerpResult {
   url: string
 }
 
-/** 信源：SERP 排名 + 是否被 AI 引用 + 与 AI 回答的相关度 */
+/** 信源：SERP 排名 + 是否被 AI 引用 + 与 AI 回答的相关度 + 5 维质量评分 */
 export interface GeoAuditSource {
   rank: number
   title: string
@@ -121,6 +121,11 @@ export interface GeoAuditSource {
   snippet: string
   citedByAi: boolean
   relevance: number // 0-100
+  // ── 5 维内容质量评分（server/scorer.mjs）──
+  scores?: Record<string, number> // { relevance, authority, freshness, completeness, quotability }
+  overallScore?: number // 0-100 综合
+  qualityLevel?: "high" | "medium" | "low"
+  qualityGrade?: "A" | "B" | "C"
 }
 
 /** 全局信源排名（跨 query 聚合）：被 AI 引用次数 + 平均相关度 */
@@ -209,4 +214,40 @@ export async function aiGeoAudit(input: {
   } finally {
     clearTimeout(timer)
   }
+}
+
+// ---- 多格式内容输出（图文 / 社媒 / 视频脚本 / 落地页）----
+
+export type ContentFormat = "article" | "social" | "video_script" | "landing"
+
+export interface ContentFormatResult {
+  title?: string
+  subtitle?: string
+  content?: string
+  tags?: string[]
+  imagePrompt?: string
+  hook?: string
+  script?: string
+  duration?: string
+  cta?: string
+  pageTitle?: string
+  metaDescription?: string
+  sections?: { type: string; headline?: string; subheadline?: string; cta?: string; title?: string; items?: string[] }[]
+  schemaType?: string
+  keyEntities?: string[]
+  [k: string]: unknown
+}
+
+export function aiGenerateContent(input: {
+  text: string
+  title?: string
+  format?: ContentFormat
+  brand?: string
+}): Promise<ContentFormatResult> {
+  return postJson<ContentFormatResult>("/ai/generate-content", {
+    text: input.text,
+    title: input.title,
+    format: input.format || "article",
+    brand: input.brand,
+  })
 }
