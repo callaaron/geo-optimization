@@ -206,7 +206,7 @@ export async function aiGeoAudit(input: {
   intendedContent?: string[]
 }): Promise<GeoAuditResult> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 180000) // 3 分钟超时（多 query + 搜索 + LLM）
+  const timer = setTimeout(() => controller.abort(), 600000) // 10 分钟超时（多 query + 搜索 + LLM；后端已并发化）
   try {
     const resp = await fetch("/api/geo/audit", {
       method: "POST",

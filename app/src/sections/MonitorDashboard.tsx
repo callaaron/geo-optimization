@@ -378,7 +378,11 @@ export function MonitorDashboard() {
       setExpanded(res.perQuery[0]?.query ?? null)
       toast.success(`监测完成：搜索可见度 ${res.serpVisibility}% / AI 引用率 ${res.aiCitationRate}%`)
     } catch (e) {
-      toast.error(`监测失败：${(e as Error).message || "后端异常"}`)
+      const msg = (e as Error).message || "后端异常"
+      const friendly = /aborted|abort|timeout|timed out/i.test(msg)
+        ? "请求超时或被中断，请减少 query 数量后重试"
+        : msg
+      toast.error(`监测失败：${friendly}`)
     } finally {
       setLoading(false)
     }

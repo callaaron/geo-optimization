@@ -232,24 +232,30 @@ export async function aiGeoAudit({ brand, domain, queries, competitors, intended
     ? intendedContent.map((s) => String(s).trim()).filter(Boolean)
     : []
 
-  // 逐条 query 执行搜索 + RAG 分析
+  // 逐条 query 执行搜索 + RAG 分析（并发限制 3，避免慢查询排队导致前端超时）
   const perQuery = []
-  for (const query of queryList) {
-    try {
-      const result = await auditSingleQuery(query, brandName, dom, intendedList)
-      perQuery.push(result)
-    } catch (err) {
-      perQuery.push({
-        query,
-        error: String(err.message || err),
-        serpResults: [],
-        inSerp: false,
-        aiAnswer: "",
-        inAiAnswer: false,
-        brandsInSerp: [],
-        brandsInAnswer: [],
-      })
-    }
+  const CONCURRENCY = 3
+  for (let i = 0; i < queryList.length; i += CONCURRENCY) {
+    const chunk = queryList.slice(i, i + CONCURRENCY)
+    const chunkResults = await Promise.all(
+      chunk.map(async (query) => {
+        try {
+          return await auditSingleQuery(query, brandName, dom, intendedList)
+        } catch (err) {
+          return {
+            query,
+            error: String(err.message || err),
+            serpResults: [],
+            inSerp: false,
+            aiAnswer: "",
+            inAiAnswer: false,
+            brandsInSerp: [],
+            brandsInAnswer: [],
+          }
+        }
+      }),
+    )
+    perQuery.push(...chunkResults)
   }
 
   // 汇总

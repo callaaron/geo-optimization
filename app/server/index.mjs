@@ -5,7 +5,7 @@ import { createServer } from "node:http"
 import { readFile, stat } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 import { dirname, join, extname, normalize } from "node:path"
-import { isConfigured, searchConfigured, SEARCH, CONFIG } from "./ark.mjs"
+import { isConfigured, searchConfigured, SEARCH, CONFIG, DEEPSEEK, ARK } from "./ark.mjs"
 import { aiAnalyze, aiRewrite, aiCitation, aiGeoAudit, aiContentGap, aiExtractProfile, aiSuggest, aiGenerateContent } from "./ai.mjs"
 import {
   listProjects,
@@ -122,6 +122,11 @@ const server = createServer(async (req, res) => {
           provider: CONFIG.provider, // 当前文字模型供应商：deepseek | ark
           model: CONFIG.model,
           baseUrl: CONFIG.baseUrl,
+          fallbackAvailable: CONFIG.provider === "deepseek" ? !!ARK.apiKey : !!DEEPSEEK.apiKey,
+          providers: {
+            deepseek: { available: !!DEEPSEEK.apiKey, model: DEEPSEEK.model },
+            ark: { available: !!ARK.apiKey, model: ARK.model },
+          },
           searchConfigured: searchConfigured(), // 联网真监测是否已配置
           searchModel: SEARCH.model,
         })

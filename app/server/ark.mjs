@@ -58,7 +58,15 @@ export const CONFIG =
     : { provider: "ark", baseUrl: ARK.baseUrl, apiKey: ARK.apiKey, model: ARK.model }
 
 export function isConfigured() {
-  return !!CONFIG.apiKey
+  return !!CONFIG.apiKey || !!ARK.apiKey || !!DEEPSEEK.apiKey
+}
+
+class ProviderError extends Error {
+  constructor(status, label, text) {
+    super(`${label} ${status}: ${text}`)
+    this.status = status
+    this.label = label
+  }
 }
 
 // ── 联网检索（真·AI 引用监测）—— 独立的普通 Ark key + 已开通联网搜索的 doubao 模型 ──
@@ -95,7 +103,7 @@ async function callChat(url, apiKey, body, timeoutMs, label) {
     })
     const rawText = await resp.text()
     if (!resp.ok) {
-      throw new Error(`${label} ${resp.status}: ${rawText.slice(0, 300)}`)
+      throw new ProviderError(resp.status, label, rawText.slice(0, 300))
     }
     let data
     try {
@@ -118,18 +126,21 @@ async function callChat(url, apiKey, body, timeoutMs, label) {
  * @returns {Promise<string>} 模型文本输出
  */
 export async function chat(opts) {
-  if (!CONFIG.apiKey) {
-    throw new Error(`${CONFIG.provider === "deepseek" ? "DEEPSEEK_API_KEY" : "ARK_API_KEY"} 未配置`)
-  }
   const { system, user, temperature = 0.4, maxTokens = 1600 } = opts
   const messages = []
   if (system) messages.push({ role: "system", content: system })
   messages.push({ role: "user", content: user })
 
-  if (CONFIG.provider === "deepseek") {
-    // 思考型模型响应更慢，默认给到 120s 超时
+  const deepseekAvailable = !!DEEPSEEK.apiKey
+  const arkAvailable = !!ARK.apiKey
+  if (!deepseekAvailable && !arkAvailable) {
+    throw new Error("DEEPSEEK_API_KEY 与 ARK_API_KEY 均未配置")
+  }
+
+  const callDeepSeek = async () => {
+    if (!deepseekAvailable) throw new ProviderError(401, "DeepSeek", "API key 未配置")
     const timeoutMs = opts.timeoutMs || 120000
-    const body = { model: CONFIG.model, messages, max_tokens: maxTokens }
+    const body = { model: DEEPSEEK.model, messages, max_tokens: maxTokens }
     const useThinking = opts.thinking === undefined ? DEEPSEEK.thinking : opts.thinking
     if (useThinking) {
       // 思考模式下 temperature 会被忽略/报错，故不下发；改用 reasoning_effort 控制思维强度
@@ -138,13 +149,33 @@ export async function chat(opts) {
     } else {
       body.temperature = temperature
     }
-    return callChat(`${CONFIG.baseUrl}/chat/completions`, CONFIG.apiKey, body, timeoutMs, "DeepSeek")
+    return callChat(`${DEEPSEEK.baseUrl}/chat/completions`, DEEPSEEK.apiKey, body, timeoutMs, "DeepSeek")
   }
 
-  // Ark Agent Plan：套餐路径 /api/plan/v3/chat/completions
-  const timeoutMs = opts.timeoutMs || 60000
-  const body = { model: CONFIG.model, messages, temperature, max_tokens: maxTokens }
-  return callChat(`${CONFIG.baseUrl}/v3/chat/completions`, CONFIG.apiKey, body, timeoutMs, "Ark")
+  const callArk = async () => {
+    if (!arkAvailable) throw new ProviderError(401, "Ark", "API key 未配置")
+    const timeoutMs = opts.timeoutMs || 60000
+    const body = { model: ARK.model, messages, temperature, max_tokens: maxTokens }
+    return callChat(`${ARK.baseUrl}/v3/chat/completions`, ARK.apiKey, body, timeoutMs, "Ark")
+  }
+
+  // 当主供应商因余额/鉴权/限流/服务端错误失败时，自动回退到另一家
+  const FALLBACK_STATUSES = new Set([401, 402, 403, 429, 500, 502, 503, 504])
+  const tryPrimary = CONFIG.provider === "deepseek" ? callDeepSeek : callArk
+  const tryFallback = CONFIG.provider === "deepseek" ? callArk : callDeepSeek
+  const hasFallback = CONFIG.provider === "deepseek" ? arkAvailable : deepseekAvailable
+
+  try {
+    return await tryPrimary()
+  } catch (err) {
+    const canFallback = hasFallback && err instanceof ProviderError && FALLBACK_STATUSES.has(err.status)
+    if (!canFallback) throw err
+    try {
+      return await tryFallback()
+    } catch (err2) {
+      throw new Error(`主模型 ${CONFIG.provider} 失败（${err.message}），回退模型也失败（${err2.message || err2}）`)
+    }
+  }
 }
 
 /**
