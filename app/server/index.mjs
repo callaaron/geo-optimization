@@ -15,6 +15,7 @@ import { buildAuditReport } from "./report.mjs"
 import { extractFileText, readMultipart } from "./upload.mjs"
 import { scoreSources } from "./scorer.mjs"
 import { getMetrics, seedDemoData } from "./metrics.mjs"
+import { getSchedule, updateSchedule, getLogs, setAuditCallback, initScheduler } from "./scheduler.mjs"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DIST = join(__dirname, "..", "dist")
@@ -174,6 +175,19 @@ const server = createServer(async (req, res) => {
       if (pathname === "/api/metrics" && req.method === "GET") {
         const data = await getMetrics()
         return sendJson(res, 200, { ok: true, data })
+      }
+
+      // ── 定时调度器 + 飞书通知 ──
+      if (pathname === "/api/scheduler" && req.method === "GET") {
+        return sendJson(res, 200, { ok: true, data: getSchedule() })
+      }
+      if (pathname === "/api/scheduler" && req.method === "PUT") {
+        const body = await readBody(req)
+        const data = updateSchedule(body)
+        return sendJson(res, 200, { ok: true, data })
+      }
+      if (pathname === "/api/scheduler/logs" && req.method === "GET") {
+        return sendJson(res, 200, { ok: true, data: getLogs() })
       }
 
       // ── 演示种子数据（不需要 AI key）──
@@ -379,6 +393,7 @@ const server = createServer(async (req, res) => {
   await serveStatic(req, res, pathname)
 })
 
+initScheduler()
 server.listen(PORT, () => {
   console.log(`[GEO AI] 服务已启动: http://localhost:${PORT}`)
   console.log(`[GEO AI] 文字模型: ${isConfigured() ? "已就绪 ✅" : "未配置 ⚠️"} | 供应商 ${CONFIG.provider} | 模型 ${CONFIG.model} | ${CONFIG.baseUrl}`)

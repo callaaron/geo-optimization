@@ -4,7 +4,7 @@ import Database from "better-sqlite3"
 import { randomUUID } from "node:crypto"
 import { fileURLToPath } from "node:url"
 import { dirname, join } from "node:path"
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, mkdirSync } from "node:fs"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = join(__dirname, "..", "data")
@@ -12,11 +12,10 @@ const DB_PATH = join(DATA_DIR, "geo.db")
 const OLD_PROJECTS = join(DATA_DIR, "projects.json")
 const OLD_USERS = join(DATA_DIR, "users.json")
 
-let db: Database.Database
+let db
 
-function getDb(): Database.Database {
+function getDb() {
   if (db) return db
-  const { mkdirSync } = require("node:fs")
   mkdirSync(DATA_DIR, { recursive: true })
   db = new Database(DB_PATH)
   db.pragma("journal_mode = WAL")
@@ -26,7 +25,7 @@ function getDb(): Database.Database {
   return db
 }
 
-function initTables(d: Database.Database) {
+function initTables(d) {
   d.exec(`
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY, brand TEXT NOT NULL, domain TEXT DEFAULT '', industry TEXT DEFAULT '',
@@ -78,8 +77,8 @@ function initTables(d: Database.Database) {
 }
 
 // ── JSON → SQLite 数据迁移（幂等：已有数据则跳过）──
-function migrateJsonData(d: Database.Database) {
-  const count = d.prepare("SELECT COUNT(*) as c FROM projects").get() as { c: number }
+function migrateJsonData(d) {
+  const count = d.prepare("SELECT COUNT(*) as c FROM projects").get()
   if (count.c > 0) return // 已有数据，跳过迁移
 
   // 迁移 projects.json
@@ -135,11 +134,11 @@ function migrateJsonData(d: Database.Database) {
 // ── 项目 CRUD（与 project.mjs 保持相同接口）──
 export async function listProjects() {
   const d = getDb()
-  const projects = d.prepare("SELECT * FROM projects ORDER BY updatedAt DESC").all() as any[]
+  const projects = d.prepare("SELECT * FROM projects ORDER BY updatedAt DESC").all()
   return projects.map(p => {
-    const competitors = d.prepare("SELECT name FROM project_competitors WHERE projectId=? ORDER BY rowid").all(p.id).map((r:any)=>r.name)
-    const queries = d.prepare("SELECT query FROM project_queries WHERE projectId=? ORDER BY rowid").all(p.id).map((r:any)=>r.query)
-    const audits = d.prepare("SELECT * FROM audits WHERE projectId=? ORDER BY timestamp").all(p.id).map((a:any) => {
+    const competitors = d.prepare("SELECT name FROM project_competitors WHERE projectId=? ORDER BY rowid").all(p.id).map(r=>r.name)
+    const queries = d.prepare("SELECT query FROM project_queries WHERE projectId=? ORDER BY rowid").all(p.id).map(r=>r.query)
+    const audits = d.prepare("SELECT * FROM audits WHERE projectId=? ORDER BY timestamp").all(p.id).map(a => {
       const perQuery = d.prepare("SELECT * FROM audit_per_query WHERE auditId=? ORDER BY id").all(a.id)
       const topCompetitors = d.prepare("SELECT name, count FROM audit_competitors WHERE auditId=? ORDER BY count DESC").all(a.id)
       return { ...a, perQuery, topCompetitors, gapAnalysis: JSON.parse(a.gapAnalysis||"{}") }
@@ -148,12 +147,12 @@ export async function listProjects() {
   })
 }
 
-export async function getProject(id: string) {
+export async function getProject(id) {
   const all = await listProjects()
   return all.find(p => p.id === id) || null
 }
 
-export async function createProject(input: any = {}) {
+export async function createProject(input = {}) {
   const d = getDb()
   const id = input.id || randomUUID()
   const now = new Date().toISOString()
@@ -168,19 +167,19 @@ export async function createProject(input: any = {}) {
   return getProject(id)
 }
 
-export async function updateProject(id: string, patch: any = {}) {
+export async function updateProject(id, patch = {}) {
   const existing = await getProject(id)
   if (!existing) return null
   return createProject({ ...existing, ...patch, id, createdAt: existing.createdAt, updatedAt: new Date().toISOString() })
 }
 
-export async function deleteProject(id: string) {
+export async function deleteProject(id) {
   const d = getDb()
   const result = d.prepare("DELETE FROM projects WHERE id=?").run(id)
   return result.changes > 0
 }
 
-export async function addAudit(projectId: string, auditData: any = {}) {
+export async function addAudit(projectId, auditData = {}) {
   const d = getDb()
   const aid = randomUUID()
   const now = auditData.timestamp || new Date().toISOString()
@@ -199,17 +198,17 @@ export async function addAudit(projectId: string, auditData: any = {}) {
 // ── 用户 CRUD ──
 export async function listUsers() {
   const d = getDb()
-  const users = d.prepare("SELECT * FROM users ORDER BY updatedAt DESC").all() as any[]
+  const users = d.prepare("SELECT * FROM users ORDER BY updatedAt DESC").all()
   return users.map(u => {
-    const queries = d.prepare("SELECT query FROM user_queries WHERE userId=? ORDER BY rowid").all(u.id).map((r:any)=>r.query)
-    const competitors = d.prepare("SELECT name FROM user_competitors WHERE userId=? ORDER BY rowid").all(u.id).map((r:any)=>r.name)
+    const queries = d.prepare("SELECT query FROM user_queries WHERE userId=? ORDER BY rowid").all(u.id).map(r=>r.query)
+    const competitors = d.prepare("SELECT name FROM user_competitors WHERE userId=? ORDER BY rowid").all(u.id).map(r=>r.name)
     return { ...u, queries, competitors, active: !!u.active }
   })
 }
 
-export async function getUser(id: string) { const all = await listUsers(); return all.find(u=>u.id===id)||null }
+export async function getUser(id) { const all = await listUsers(); return all.find(u=>u.id===id)||null }
 
-export async function createUser(input: any = {}) {
+export async function createUser(input = {}) {
   const d = getDb()
   const id = input.id || randomUUID()
   const now = new Date().toISOString()
@@ -224,13 +223,13 @@ export async function createUser(input: any = {}) {
   return getUser(id)
 }
 
-export async function updateUser(id: string, patch: any = {}) {
+export async function updateUser(id, patch = {}) {
   const existing = await getUser(id)
   if (!existing) return null
   return createUser({ ...existing, ...patch, id, createdAt: existing.createdAt, updatedAt: new Date().toISOString() })
 }
 
-export async function deleteUser(id: string) {
+export async function deleteUser(id) {
   const d = getDb()
   const result = d.prepare("DELETE FROM users WHERE id=?").run(id)
   return result.changes > 0

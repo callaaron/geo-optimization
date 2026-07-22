@@ -1,21 +1,90 @@
-// 定时审计调度器 + 报告导出（参考 gego 的 scheduler + auto-geo 的 check CI）
-import { useState } from "react"
+// 定时审计调度器 + 飞书通知 + 报告导出（对接后端 node-cron）
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
-import { Clock, Calendar, FileDown, BarChart3 } from "lucide-react"
+import { Clock, Calendar, FileDown, BarChart3, Bell } from "lucide-react"
 
 const SCHEDULE_PRESETS = [
-  { key: "off", label: "手动", desc: "不自动运行，需手动点击「运行监测」" },
-  { key: "daily", label: "每日", desc: "每天上午 9:00 自动审计" },
-  { key: "weekly", label: "每周", desc: "每周一上午 9:00 自动审计" },
+  { key: "off", label: "手动", desc: "不自动运行，需手动点击「运行监测」", cron: "" },
+  { key: "daily", label: "每日", desc: "每天上午 9:00 自动审计", cron: "0 9 * * *" },
+  { key: "hourly", label: "每小时", desc: "每小时整点自动审计", cron: "0 * * * *" },
+  { key: "weekly", label: "每周", desc: "每周一上午 9:00 自动审计", cron: "0 9 * * 1" },
 ] as const
 
+interface ScheduleState {
+  enabled: boolean
+  cron: string
+  label: string
+  feishuWebhook: string
+  notifOnComplete: boolean
+}
+
 export default function SchedulerPanel() {
-  const [schedule, setSchedule] = useState("off")
+  const [schedule, setSchedule] = useState<ScheduleState>({
+    enabled: false, cron: "", label: "手动", feishuWebhook: "", notifOnComplete: false,
+  })
+  const [activePreset, setActivePreset] = useState("off")
   const [exporting, setExporting] = useState(false)
   const [csvExporting, setCsvExporting] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  // 从后端加载当前调度配置
+  useEffect(() => {
+    fetch("/api/scheduler").then(r => r.json()).then(j => {
+      if (j.ok && j.data) {
+        setSchedule(j.data)
+        // 反向匹配 preset
+        const match = SCHEDULE_PRESETS.find(p => p.cron === j.data.cron)
+        setActivePreset(match?.key || "off")
+      }
+    }).catch(() => {})
+  }, [])
+
+  async function applyPreset(key: string) {
+    const preset = SCHEDULE_PRESETS.find(p => p.key === key)
+    if (!preset) return
+    setSaving(true)
+    try {
+      const enabled = key !== "off"
+      const r = await fetch("/api/scheduler", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled, cron: preset.cron, label: preset.label }),
+      })
+      const j = await r.json()
+      if (j.ok) {
+        setSchedule(j.data)
+        setActivePreset(key)
+        toast.success(enabled ? `已启用「${preset.label}」定时审计` : "已关闭定时审计")
+      } else {
+        toast.error("保存失败")
+      }
+    } catch (e: any) { toast.error(e.message) }
+    finally { setSaving(false) }
+  }
+
+  async function updateWebhook() {
+    setSaving(true)
+    try {
+      const r = await fetch("/api/scheduler", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          feishuWebhook: schedule.feishuWebhook,
+          notifOnComplete: schedule.notifOnComplete,
+        }),
+      })
+      const j = await r.json()
+      if (j.ok) {
+        setSchedule(j.data)
+        toast.success("飞书通知配置已保存")
+      }
+    } catch (e: any) { toast.error(e.message) }
+    finally { setSaving(false) }
+  }
 
   const handleExportReport = async () => {
     setExporting(true)
@@ -66,15 +135,43 @@ export default function SchedulerPanel() {
           <div className="flex flex-wrap gap-2">
             {SCHEDULE_PRESETS.map(p => (
               <button key={p.key}
-                onClick={() => { setSchedule(p.key); toast.success(`已设为「${p.label}」模式`) }}
+                onClick={() => applyPreset(p.key)}
+                disabled={saving}
                 className={`rounded-lg border px-3 py-2 text-left transition-all ${
-                  schedule === p.key ? "border-primary/40 bg-primary/5" : "border-border/40 hover:border-border"
+                  activePreset === p.key ? "border-primary/40 bg-primary/5" : "border-border/40 hover:border-border"
                 }`}>
-                <div className="flex items-center gap-2"><Calendar className="h-3.5 w-3.5 text-primary" /><span className="text-xs font-medium">{p.label}</span><Switch checked={schedule === p.key && p.key !== "off"} className="scale-75 ml-1" /></div>
+                <div className="flex items-center gap-2"><Calendar className="h-3.5 w-3.5 text-primary" /><span className="text-xs font-medium">{p.label}</span><Switch checked={activePreset === p.key && p.key !== "off"} className="scale-75 ml-1" /></div>
                 <p className="text-[10px] text-muted-foreground mt-1">{p.desc}</p>
               </button>
             ))}
           </div>
+          {saving && <p className="mt-2 text-xs text-muted-foreground">保存中…</p>}
+        </CardContent>
+      </Card>
+
+      {/* 飞书通知 */}
+      <Card className="border-border/40">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2"><Bell className="h-4 w-4 text-primary" />飞书通知</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">审计完成后推送结果</span>
+            <Switch
+              checked={schedule.notifOnComplete}
+              onCheckedChange={(v) => setSchedule(s => ({ ...s, notifOnComplete: v }))}
+            />
+          </div>
+          <Input
+            placeholder="飞书 Webhook URL（可选）"
+            value={schedule.feishuWebhook}
+            onChange={(e) => setSchedule(s => ({ ...s, feishuWebhook: e.target.value }))}
+            className="text-xs h-8"
+          />
+          <Button size="sm" variant="outline" onClick={updateWebhook} disabled={saving}>
+            <Bell className="mr-1.5 h-3.5 w-3.5" /> 保存通知配置
+          </Button>
+          <p className="text-[10px] text-muted-foreground">获取方式：飞书群 → 群设置 → 群机器人 → 添加自定义机器人 → 复制 Webhook 地址</p>
         </CardContent>
       </Card>
 

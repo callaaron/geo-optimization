@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
+import { parseLines } from "@/lib/geo/utils"
 import {
   Radar,
   Upload,
@@ -24,6 +25,7 @@ export interface Config {
   competitors: string
   queries: string
   intended: string
+  aliases: string  // 品牌别名，一行一个：绿的谐波\nLvde\nLeaderdrive
 }
 
 export const EMPTY_CONFIG: Config = {
@@ -32,6 +34,7 @@ export const EMPTY_CONFIG: Config = {
   competitors: "",
   queries: "",
   intended: "",
+  aliases: "",
 }
 
 // ── 制造业示范：谐波减速机（工业核心零部件）生产厂家 ──
@@ -43,13 +46,7 @@ export const DEMO_CONFIG: Config = {
     "谐波减速机哪个品牌好\n工业机器人核心零部件厂家\n国产精密减速机推荐\n协作机器人减速器选型\n谐波减速机寿命对比",
   intended:
     "专注谐波减速机研发制造20年\n精度保持寿命超10000小时\n通过 ISO9001 与 CE 认证\n为工业机器人厂商提供定制化减速方案\n自主研发柔轮热处理工艺",
-}
-
-function parseLines(s: string): string[] {
-  return s
-    .split("\n")
-    .map((x) => x.trim())
-    .filter(Boolean)
+  aliases: "锐工精密\n锐工\nRuigong\nRG精密",
 }
 
 interface FieldMeta {
@@ -105,6 +102,15 @@ const FIELD_META: FieldMeta[] = [
     rows: 3,
     placeholder: "每行一个，如：\n专注谐波减速机研发20年",
     help: "企业希望被 AI 记住的关键信息点（卖点 / 认证 / 能力，每行一个）。用于追踪「想表达 vs 已收录 vs 未出现」的内容差距。",
+  },
+  {
+    key: "aliases",
+    label: "品牌别名（归一化）",
+    required: false,
+    type: "textarea",
+    rows: 2,
+    placeholder: "每行一个，如：\n绿的谐波\nLvde\nLeaderdrive",
+    help: "品牌的不同叫法、英文名、缩写等（每行一个）。检测结果中所有变体将被统一归一到规范品牌名，避免重复计数。",
   },
 ]
 
