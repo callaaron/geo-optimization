@@ -13,7 +13,7 @@ import type { AnalysisRecord, DimensionKey } from "@/types/geo"
 import { toast } from "sonner"
 import { Toaster } from "@/components/ui/sonner"
 import {
-  BarChart3, Activity, Globe, Search, PenLine, FolderOpen, Sparkles, Upload, Clipboard, Brain, Lightbulb, Moon, Sun
+  BarChart3, Activity, Globe, Search, PenLine, FolderOpen, Sparkles, Upload, Clipboard, Brain, Lightbulb, Moon, Sun, Menu, X
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -258,6 +258,8 @@ export default function App() {
   const [_, setSmartProfile] = useState<Record<string, unknown> | null>(null)
   // 侧栏折叠
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  // 移动端导航抽屉
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   function handleResult(a: GeoAnalysis, input: GeoInput) {
     setAnalysis(a)
@@ -301,7 +303,7 @@ export default function App() {
             </p>
           </div>
           <div className="ml-auto flex items-center gap-1">
-            <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-emerald-500/30 text-emerald-600">
+            <Badge variant="outline" className="hidden text-[10px] px-2 py-0 h-5 border-emerald-500/30 text-emerald-600 sm:inline-flex">
               AI 就绪
             </Badge>
             <button
@@ -311,10 +313,18 @@ export default function App() {
             >
               {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
             </button>
+            {/* 移动端汉堡导航 */}
+            <button
+              onClick={() => setMobileNavOpen((v) => !v)}
+              aria-label="切换导航菜单"
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:hidden"
+            >
+              {mobileNavOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            </button>
           </div>
         </div>
-        {/* 4-Tab 导航 */}
-        <nav className="mx-auto flex max-w-7xl gap-0.5 overflow-x-auto px-2 pb-1.5">
+        {/* 4-Tab 导航（桌面端） */}
+        <nav className="mx-auto hidden max-w-7xl gap-0.5 overflow-x-auto px-2 pb-1.5 md:flex">
           {NAV.map((n) => {
             const I = n.icon
             const active = tab === n.key
@@ -334,6 +344,37 @@ export default function App() {
             )
           })}
         </nav>
+        {/* 4-Tab 导航（移动端抽屉） */}
+        {mobileNavOpen && (
+          <div className="border-t border-border bg-background md:hidden">
+            <nav className="mx-auto flex max-w-7xl flex-col gap-0.5 px-2 py-2">
+              {NAV.map((n) => {
+                const I = n.icon
+                const active = tab === n.key
+                return (
+                  <button
+                    key={n.key}
+                    onClick={() => {
+                      setTab(n.key)
+                      setMobileNavOpen(false)
+                    }}
+                    className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
+                      active
+                        ? "bg-emerald-500/10 text-emerald-600"
+                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                    }`}
+                  >
+                    <I className="h-4 w-4 shrink-0" />
+                    <span>{n.label}</span>
+                    <span className="ml-auto truncate text-[10px] text-muted-foreground">
+                      {n.desc}
+                    </span>
+                  </button>
+                )
+              })}
+            </nav>
+          </div>
+        )}
       </header>
 
       {/* ── 左右分栏主体（非仪表盘页面才显示侧栏）── */}
@@ -344,14 +385,14 @@ export default function App() {
           {tab === "projects" && <MonitorSection latest={analysis} onSaveLatest={handleSaveLatest} />}
         </main>
       ) : (
-        <main className="mx-auto flex max-w-7xl gap-4 px-4 py-4">
+        <main className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 md:flex-row">
           {/* ── 左侧：智能输入面板（可折叠）── */}
           <aside
             className={`shrink-0 transition-all duration-200 ${
-              sidebarCollapsed ? "w-0 overflow-hidden opacity-0" : "w-72"
+              sidebarCollapsed ? "hidden" : "w-full md:w-72"
             }`}
           >
-            <div className="sticky top-20 space-y-4 rounded-xl border border-border bg-card p-4">
+            <div className="relative space-y-4 rounded-xl border border-border bg-card p-4 md:sticky md:top-20">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold">智能输入</span>
                 <button
@@ -369,7 +410,7 @@ export default function App() {
           {sidebarCollapsed && (
             <button
               onClick={() => setSidebarCollapsed(false)}
-              className="sticky top-20 shrink-0 self-start rounded-lg border border-border bg-card p-2 text-muted-foreground hover:text-foreground"
+              className="md:sticky md:top-20 shrink-0 self-start rounded-lg border border-border bg-card p-2 text-muted-foreground hover:text-foreground"
             >
               <Lightbulb className="h-4 w-4" />
             </button>
