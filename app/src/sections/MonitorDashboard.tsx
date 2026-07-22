@@ -14,15 +14,14 @@ import {
   type ProjectInput,
 } from "@/lib/geo/project-client"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { EmptyState } from "@/components/EmptyState"
+import { EnterpriseConfig, EMPTY_CONFIG, type Config } from "@/sections/EnterpriseConfig"
 import { Compass } from "lucide-react"
 import { toast } from "sonner"
 import {
-  Search,
   Sparkles,
   Target,
   Link2,
@@ -33,7 +32,6 @@ import {
   CircleSlash,
   FileDown,
   Save,
-  Loader2,
   Radar,
 } from "lucide-react"
 
@@ -51,6 +49,25 @@ function downloadHtml(filename: string, html: string) {
   a.download = filename
   a.click()
   URL.revokeObjectURL(a.href)
+}
+
+// ── 企业监测配置本地持久化（专属修改板块：后续可随时回来编辑）──
+const CONFIG_KEY = "geo-enterprise-config"
+function loadConfig(): Config {
+  try {
+    const raw = localStorage.getItem(CONFIG_KEY)
+    if (raw) return { ...EMPTY_CONFIG, ...JSON.parse(raw) }
+  } catch {
+    /* ignore */
+  }
+  return { ...EMPTY_CONFIG }
+}
+function persistConfig(c: Config) {
+  try {
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(c))
+  } catch {
+    /* ignore */
+  }
 }
 
 function relevanceColor(v: number) {
@@ -304,15 +321,14 @@ function QueryCard({
 }
 
 export function MonitorDashboard() {
-  const [brand, setBrand] = useState("正岛食品")
-  const [domain, setDomain] = useState("zhengdao.com")
-  const [competitors, setCompetitors] = useState("船歌鱼水饺\n喜家德\n湾仔码头\n双合园")
-  const [queries, setQueries] = useState(
-    "海鲜水饺代工厂家\n青岛海鲜水饺品牌\n鱼糜制品生产厂家\n海鲜水饺 OEM 贴牌",
-  )
-  const [intended, setIntended] = useState(
-    "专注海鲜水饺 OEM/ODM 代工\n青岛本地海鲜原料直采\n通过 HACCP 食品安全认证\n为餐饮品牌提供定制化水饺研发",
-  )
+  const [config, setConfig] = useState<Config>(loadConfig)
+  const [savedAt, setSavedAt] = useState<number | null>(() => {
+    try {
+      return localStorage.getItem(CONFIG_KEY) ? Date.now() : null
+    } catch {
+      return null
+    }
+  })
   const [aiReady, setAiReady] = useState(false)
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<GeoAuditResult | null>(null)
@@ -324,10 +340,22 @@ export function MonitorDashboard() {
     aiHealth().then((h) => setAiReady(h.ok && h.configured))
   }, [])
 
+  function handleSaveConfig() {
+    persistConfig(config)
+    setSavedAt(Date.now())
+    toast.success("配置已保存，可随时在上方修改板块编辑")
+  }
+  function handleResetConfig() {
+    setConfig({ ...EMPTY_CONFIG })
+    persistConfig({ ...EMPTY_CONFIG })
+    setSavedAt(null)
+    toast.info("已重置为空白配置")
+  }
+
   async function run() {
-    const qs = parseLines(queries)
-    const ic = parseLines(intended)
-    if (!brand.trim()) {
+    const qs = parseLines(config.queries)
+    const ic = parseLines(config.intended)
+    if (!config.brand.trim()) {
       toast.error("请填写品牌名")
       return
     }
@@ -340,10 +368,10 @@ export function MonitorDashboard() {
     setSavedId(null)
     try {
       const res = await aiGeoAudit({
-        brand: brand.trim(),
-        domain: domain.trim() || undefined,
+        brand: config.brand.trim(),
+        domain: config.domain.trim() || undefined,
         queries: qs,
-        competitors: parseLines(competitors),
+        competitors: parseLines(config.competitors),
         intendedContent: ic,
       })
       setResult(res)
@@ -365,9 +393,9 @@ export function MonitorDashboard() {
         domain: result.domain,
         industry: "",
         mode: "general",
-        competitors: parseLines(competitors),
-        queries: parseLines(queries),
-        intendedContent: parseLines(intended),
+        competitors: parseLines(config.competitors),
+        queries: parseLines(config.queries),
+        intendedContent: parseLines(config.intended),
       }
       const proj = await createProject(input)
       await runAudit(proj.id, { brand: proj.brand, domain: proj.domain, queries: proj.queries })
@@ -406,73 +434,17 @@ export function MonitorDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* 企业信息录入 */}
-      <Card className="border-emerald-500/30 bg-emerald-500/5">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Radar className="h-4 w-4 text-emerald-400" /> 企业监测配置
-            <Badge variant="secondary" className="ml-1 text-[10px]">监控台</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-xs text-muted-foreground">
-            输入企业信息后一键监测：① 360 搜索情况 ② 各 AI 回答 ③ 信源来源与排名 ④ 内容与信源相关度；
-            并追踪「企业想表达 / 最终收录 / 未出现」的内容差距。
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">品牌名 *</label>
-              <Input value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="如：正岛食品" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">域名（可选）</label>
-              <Input value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="如：zhengdao.com" />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">竞品（每行一个，可选）</label>
-            <textarea
-              value={competitors}
-              onChange={(e) => setCompetitors(e.target.value)}
-              rows={2}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">监测 query（每行一个）*</label>
-            <textarea
-              value={queries}
-              onChange={(e) => setQueries(e.target.value)}
-              rows={3}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">企业想表达的内容点（每行一个，用于收录追踪）</label>
-            <textarea
-              value={intended}
-              onChange={(e) => setIntended(e.target.value)}
-              rows={3}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              onClick={run}
-              disabled={!aiReady || loading}
-              className="bg-emerald-500 text-black hover:bg-emerald-400"
-            >
-              {loading ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : (
-                <Search className="mr-1 h-4 w-4" />
-              )}
-              {loading ? "监测中（搜索 + AI 分析，约 1-2 分钟）…" : "运行监测"}
-            </Button>
-            {!aiReady && <span className="text-xs text-amber-400">需启动后端（npm run server）后方可使用。</span>}
-          </div>
-        </CardContent>
-      </Card>
+      {/* 企业监测配置（含示范信息 / 候选生成 / 持久化修改） */}
+      <EnterpriseConfig
+        value={config}
+        onChange={setConfig}
+        onRun={run}
+        aiReady={aiReady}
+        loading={loading}
+        onSave={handleSaveConfig}
+        savedAt={savedAt}
+        onReset={handleResetConfig}
+      />
 
       {result ? (
         <>
@@ -712,7 +684,7 @@ export function MonitorDashboard() {
           icon={<Compass className="h-8 w-8" />}
           title="尚未运行监测"
           desc="填写上方「企业监测配置」后点击「运行监测」，即可查看搜索可见度、AI 引用率与信源质量评分。"
-          hint="提示：左侧智能输入面板可粘贴简介一键补全品牌与 query"
+          hint="提示：可点击「一键填入示范信息」快速体验，或上传资料 / 输入品牌名让 AI 生成候选后点击填入"
         />
       )}
     </div>
