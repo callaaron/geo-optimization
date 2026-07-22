@@ -113,7 +113,8 @@ async function callChat(url, apiKey, body, timeoutMs, label) {
 
 /**
  * 调用文字类主 LLM。根据 PROVIDER 路由到 DeepSeek（OpenAI 兼容）或 Ark（Agent Plan 套餐路径）。
- * @param {{system?:string, user:string, temperature?:number, maxTokens?:number, timeoutMs?:number}} opts
+ * @param {{system?:string, user:string, temperature?:number, maxTokens?:number, timeoutMs?:number, thinking?:boolean}} opts
+ *   - thinking: 可选。覆盖默认思考模式开关（仅 DeepSeek 生效）。用于分类/抽取等轻量任务走快速通道。
  * @returns {Promise<string>} 模型文本输出
  */
 export async function chat(opts) {
@@ -129,7 +130,8 @@ export async function chat(opts) {
     // 思考型模型响应更慢，默认给到 120s 超时
     const timeoutMs = opts.timeoutMs || 120000
     const body = { model: CONFIG.model, messages, max_tokens: maxTokens }
-    if (DEEPSEEK.thinking) {
+    const useThinking = opts.thinking === undefined ? DEEPSEEK.thinking : opts.thinking
+    if (useThinking) {
       // 思考模式下 temperature 会被忽略/报错，故不下发；改用 reasoning_effort 控制思维强度
       body.thinking = { type: "enabled" }
       body.reasoning_effort = DEEPSEEK.reasoningEffort

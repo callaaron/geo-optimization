@@ -95,6 +95,84 @@ function normalizeRewrite(j) {
  * 第 1 步 — 用自然口吻向模型提出真实行业问题（模拟真实用户问 AI）
  * 第 2 步 — 程序化检测答案里是否出现品牌/域名，并抽取其提及的竞品
  */
+// ── 4 级 AI 认知检测（direct / indirect / triggerable / none）──
+const CITATION_LEVELS = {
+  direct: "直接引用",
+  indirect: "间接提及",
+  triggerable: "可触发提及",
+  none: "未提及",
+}
+
+/**
+ * 对「AI 回答 + 引用来源」做结构化认知层级判定。
+ * 走非思考快速通道（thinking:false, maxTokens:500），不阻塞主流程。
+ * @returns {{level:string, levelLabel:string, mentioned:boolean, brandsInAnswer:string[], reason:string, suggestion:string}}
+ */
+async function judgeCitation({ query, brand, domain, answer, sources = [] }) {
+  const brandName = String(brand || "").trim()
+  const dom = String(domain || "").trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "")
+  const ans = answer || ""
+  const lower = ans.toLowerCase()
+  const inSources = !!dom && (sources || []).some((s) => (s?.url || "").toLowerCase().includes(dom.toLowerCase()))
+  const direct =
+    (!!brandName && ans.includes(brandName)) ||
+    (!!dom && lower.includes(dom.toLowerCase())) ||
+    inSources
+
+  const fallback = {
+    level: direct ? "direct" : "none",
+    levelLabel: direct ? CITATION_LEVELS.direct : CITATION_LEVELS.none,
+    mentioned: direct,
+    brandsInAnswer: [],
+    reason: direct ? "AI 回答中直接出现了目标品牌/域名。" : "AI 回答未涉及目标品牌。",
+    suggestion: direct ? "" : "补充权威数据、品牌定义与结构化 FAQ，提升被 AI 引用概率。",
+  }
+
+  try {
+    const j = await chatJson({
+      system:
+        "你是 GEO 分析器。基于『用户问题』『AI 的回答』和『AI 引用的来源网址』，对目标品牌的 AI 认知层级做结构化判定。只输出 JSON。",
+      user: `用户问题：${query}
+目标品牌：${brandName || "(未指定)"}${dom ? `（域名 ${dom}）` : ""}
+AI 引用的来源：${(sources || []).map((s) => s?.url || "").filter(Boolean).join("、") || "(无)"}
+AI 的回答：
+"""
+${clip(ans, 3000)}
+"""
+
+请判定目标品牌在 AI 认知中的层级（level），并返回理由与 GEO 建议。JSON 结构：
+{
+  "level": "direct" | "indirect" | "triggerable" | "none",
+  "brandsInAnswer": ["回答中实际提到的品牌/产品/网站名称（含竞品）"],
+  "reason": "为什么是该层级（结合品牌是否出现、品类是否被覆盖、有无结构化可引用信息）",
+  "suggestion": "要让该品牌被 AI 引用，最关键的 1-2 个 GEO 动作"
+}
+
+层级定义：
+- direct（直接引用）：回答明确出现目标品牌名/域名，或目标域名出现在引用来源里，并给出关于该品牌的具体信息。
+- indirect（间接提及）：未出现目标品牌名/域名，但覆盖了该品牌所属品类/话题，或提到了同类竞品（AI 有此认知但没点名）。
+- triggerable（可触发提及）：完全未涉及该品牌；但从内容判断，若补充特定信息点（权威数据/品牌定义/结构化 FAQ）就可能被引用。
+- none（未提及）：回答与该品牌所属品类/话题完全无关，AI 无任何相关认知。`,
+      temperature: 0.2,
+      maxTokens: 500,
+      thinking: false,
+    })
+    const level = ["direct", "indirect", "triggerable", "none"].includes(j?.level) ? j.level : fallback.level
+    return {
+      level,
+      levelLabel: CITATION_LEVELS[level],
+      mentioned: level === "direct",
+      brandsInAnswer: Array.isArray(j?.brandsInAnswer)
+        ? j.brandsInAnswer.filter((s) => typeof s === "string" && s.trim())
+        : [],
+      reason: typeof j?.reason === "string" ? j.reason : fallback.reason,
+      suggestion: typeof j?.suggestion === "string" ? j.suggestion : fallback.suggestion,
+    }
+  } catch {
+    return fallback
+  }
+}
+
 export async function aiCitation({ query, brand, domain }) {
   // 真·监测：若已配置联网检索 key，则先联网搜索再作答（测「实际被引用」）；
   // 否则回退为离线固有认知（测「训练语料里有没有」）。
@@ -115,45 +193,7 @@ export async function aiCitation({ query, brand, domain }) {
     new Set(ans.match(/https?:\/\/[^\s)\]"'<>，。；、）】]+/g) || [])
   ).slice(0, 20)
   const inSources = !!dom && sources.some((u) => u.toLowerCase().includes(dom.toLowerCase()))
-  const mentioned =
-    (!!brandName && ans.includes(brandName)) ||
-    (!!dom && lower.includes(dom.toLowerCase())) ||
-    inSources
-
-  // 第 3 步 — 让模型对这次「是否会引用该品牌」做结构化归因（不改变上面的真实回答）
-  let judge = { mentioned, brandsInAnswer: [], reason: "", suggestion: "" }
-  try {
-    const j = await chatJson({
-      system:
-        "你是 GEO 分析器。基于给定的『用户问题』和『AI 的回答』，做结构化判断。只输出 JSON。",
-      user: `用户问题：${query}
-目标品牌：${brandName || "(未指定)"}${dom ? `（域名 ${dom}）` : ""}
-AI 的回答：
-"""
-${clip(ans, 3000)}
-"""
-
-只返回 JSON：
-{
-  "mentioned": ${mentioned}  是否在回答中提及了目标品牌（true/false，以事实为准）,
-  "brandsInAnswer": ["回答中实际提到的品牌/产品/网站名称"],
-  "reason": "为什么目标品牌被/未被提及（结合内容权威度、知名度、是否有结构化可引用信息）",
-  "suggestion": "要让该品牌在这类问题中被 AI 引用，最关键的 1-2 个 GEO 动作"
-}`,
-      temperature: 0.2,
-      maxTokens: 900,
-    })
-    judge = {
-      mentioned: typeof j?.mentioned === "boolean" ? j.mentioned : mentioned,
-      brandsInAnswer: Array.isArray(j?.brandsInAnswer)
-        ? j.brandsInAnswer.filter((s) => typeof s === "string" && s.trim())
-        : [],
-      reason: typeof j?.reason === "string" ? j.reason : "",
-      suggestion: typeof j?.suggestion === "string" ? j.suggestion : "",
-    }
-  } catch {
-    // 归因失败不阻塞主结果，用程序判定兜底
-  }
+  const judge = await judgeCitation({ query, brand, domain, answer: ans, sources })
 
   return {
     query,
@@ -164,6 +204,8 @@ ${clip(ans, 3000)}
     sources, // AI 联网给出的来源网址（offline 时通常为空）
     inSources, // 你的域名是否出现在被引用来源里（真·监测核心信号）
     mentioned: judge.mentioned,
+    level: judge.level,
+    levelLabel: judge.levelLabel,
     brandsInAnswer: judge.brandsInAnswer,
     reason: judge.reason,
     suggestion: judge.suggestion,
@@ -446,6 +488,9 @@ ${searchContext}
     .map((p) => trackPoint(p, serpText, aiAnswer))
     .filter(Boolean)
 
+  // 9. 4 级 AI 认知判定（复用 judgeCitation，走非思考快速通道，不阻塞主结果）
+  const citation = await judgeCitation({ query, brand: brandName, domain: dom, answer: aiAnswer, sources })
+
   return {
     query,
     serpEngine: engine,
@@ -463,6 +508,11 @@ ${searchContext}
     brandsInAnswer,
     sources,
     contentTracking,
+    // ── 4 级认知检测 ──
+    level: citation.level,
+    levelLabel: citation.levelLabel,
+    reason: citation.reason,
+    suggestion: citation.suggestion,
   }
 }
 

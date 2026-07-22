@@ -40,6 +40,9 @@ export interface AiCitationResult {
   domain: string
   answer: string
   mentioned: boolean
+  // ── 4 级 AI 认知检测 ──
+  level?: "direct" | "indirect" | "triggerable" | "none"
+  levelLabel?: string
   brandsInAnswer: string[]
   reason: string
   suggestion: string
@@ -158,6 +161,11 @@ export interface GeoAuditPerQuery {
   brandsInAnswer: string[]
   sources?: GeoAuditSource[]
   contentTracking?: ContentPointTracking[]
+  // ── 4 级 AI 认知检测 ──
+  level?: "direct" | "indirect" | "triggerable" | "none"
+  levelLabel?: string
+  reason?: string
+  suggestion?: string
   error?: string
 }
 

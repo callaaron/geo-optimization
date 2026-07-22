@@ -65,6 +65,17 @@ function gradeColor(g?: string) {
   return "#ef4444"
 }
 
+// ── 4 级 AI 认知层级配色 ──
+const CITATION_LEVEL_META: Record<string, { label: string; color: string }> = {
+  direct: { label: "直接引用", color: "#10b981" },
+  indirect: { label: "间接提及", color: "#3b82f6" },
+  triggerable: { label: "可触发提及", color: "#f59e0b" },
+  none: { label: "未提及", color: "#ef4444" },
+}
+function citationLevelColor(l?: string) {
+  return (l && CITATION_LEVEL_META[l]?.color) || "#ef4444"
+}
+
 function RelevanceBar({ value }: { value: number }) {
   return (
     <div className="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-muted">
@@ -217,9 +228,19 @@ function QueryCard({
 
           {/* 维度② 各 AI 回答情况（v1：自有 Ark RAG 综合回答） */}
           <div className="space-y-2">
-            <p className="text-xs font-medium text-violet-400">
-              ② AI 回答情况 <span className="text-[10px] text-muted-foreground">（基于真实 360 搜索的 RAG 综合 · 多 AI 适配器预留）</span>
-            </p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-violet-400">
+                ② AI 回答情况 <span className="text-[10px] text-muted-foreground">（基于真实 360 搜索的 RAG 综合 · 多 AI 适配器预留）</span>
+              </p>
+              {q.level && (
+                <Badge
+                  className="text-[10px]"
+                  style={{ background: `${citationLevelColor(q.level)}22`, color: citationLevelColor(q.level) }}
+                >
+                  {q.levelLabel || q.level}
+                </Badge>
+              )}
+            </div>
             <div className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/30 p-3 text-xs leading-relaxed">
               {q.aiAnswer || "(空)"}
             </div>
@@ -230,6 +251,18 @@ function QueryCard({
                     {b}
                   </Badge>
                 ))}
+              </div>
+            )}
+            {q.reason && (
+              <div className="rounded-md border border-border/60 bg-muted/20 p-2 text-xs leading-relaxed">
+                <span className="font-medium text-muted-foreground">判定理由：</span>
+                <span className="text-foreground/85">{q.reason}</span>
+              </div>
+            )}
+            {q.suggestion && (
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-xs leading-relaxed">
+                <span className="font-medium text-amber-400">GEO 建议：</span>
+                <span className="text-foreground/85">{q.suggestion}</span>
               </div>
             )}
           </div>
@@ -484,6 +517,30 @@ export function MonitorDashboard() {
               <p className="text-xs text-muted-foreground">
                 {result.includedCount ?? 0}/{result.intendedCount ?? 0} 内容点已收录
               </p>
+            </div>
+          </div>
+
+          {/* 4 级 AI 认知分布 */}
+          <div className="rounded-lg border border-border p-3">
+            <p className="mb-2 text-xs font-medium text-muted-foreground">
+              AI 认知层级分布 <span className="text-[10px]">（每条 query 的品牌被引用深度）</span>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(["direct", "indirect", "triggerable", "none"] as const).map((lv) => {
+                const n = (result.perQuery || []).filter((q) => q.level === lv).length
+                const meta = CITATION_LEVEL_META[lv]
+                return (
+                  <div
+                    key={lv}
+                    className="flex items-center gap-1.5 rounded-md border px-2.5 py-1"
+                    style={{ borderColor: `${meta.color}55` }}
+                  >
+                    <span className="h-2 w-2 rounded-full" style={{ background: meta.color }} />
+                    <span className="text-xs font-medium" style={{ color: meta.color }}>{meta.label}</span>
+                    <span className="text-xs tabular-nums text-muted-foreground">{n}</span>
+                  </div>
+                )
+              })}
             </div>
           </div>
 
