@@ -18,6 +18,8 @@ import { Badge } from "@/components/ui/badge"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { ContentFactorySection } from "@/sections/ContentFactorySection"
 import DataScreenSection from "@/sections/DataScreenSection"
+import { LoginPage } from "@/pages/LoginPage"
+import { useAuth } from "@/lib/AuthContext"
 import ContentSopSection from "@/sections/ContentSopSection"
 import StrategyScorer from "@/sections/StrategyScorer"
 import EnginePanel from "@/sections/EnginePanel"
@@ -56,6 +58,24 @@ const TAB_META: Record<Tab, { title: string; desc: string; subs?: { key: string;
 }
 
 export default function App() {
+  const { user, loading, logout } = useAuth()
+
+  // 登录门控
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex items-center gap-3">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <span className="text-sm text-muted-foreground">验证登录状态…</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <LoginPage />
+  }
+
   const [tab, setTab] = useState<Tab>("dashboard")
   const [sub, setSub] = useState("config")
   const [collapsed, setCollapsed] = useState(false)
@@ -110,6 +130,12 @@ export default function App() {
               {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
             </button>
           </div>
+          {!collapsed && (
+            <div className="px-2 pt-1">
+              <p className="truncate text-[10px] text-muted-foreground">{user.name} · {user.role}</p>
+              <button onClick={logout} className="text-[10px] text-muted-foreground hover:text-destructive">退出登录</button>
+            </div>
+          )}
         </div>
       </aside>
 

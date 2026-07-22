@@ -12,8 +12,11 @@ interface HealthData {
 }
 
 const ENGINE_META: Record<string, { label: string; icon: typeof Brain; desc: string; realtime: boolean }> = {
-  deepseek: { label: "DeepSeek", icon: Brain, desc: "备用文字模型（余额不足时自动回退 Ark）", realtime: false },
+  deepseek: { label: "DeepSeek", icon: Brain, desc: "DeepSeek V4（可选，回退引擎）", realtime: false },
   ark: { label: "火山方舟(Ark)", icon: Cpu, desc: "主文字模型（Agent Plan 套餐）", realtime: false },
+  openai: { label: "OpenAI", icon: Brain, desc: "GPT-4o（需配置 API Key）", realtime: false },
+  perplexity: { label: "Perplexity", icon: Globe, desc: "原生联网搜索（Sonar Pro）", realtime: true },
+  claude: { label: "Claude", icon: Brain, desc: "Anthropic Claude（需配置 API Key）", realtime: false },
 }
 
 const SEARCH_META = { label: "360 搜索引擎", icon: Globe, desc: "真·RAG 搜索：360 搜索 → 喂给 AI 做综合分析" }

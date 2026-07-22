@@ -5,7 +5,7 @@ import { createServer } from "node:http"
 import { readFile, stat } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 import { dirname, join, extname, normalize } from "node:path"
-import { isConfigured, searchConfigured, SEARCH, CONFIG, DEEPSEEK, ARK } from "./ark.mjs"
+import { isConfigured, searchConfigured, SEARCH, CONFIG, DEEPSEEK, ARK, OPENAI, PERPLEXITY, CLAUDE, ALL_PROVIDERS, getProviderConfig } from "./ark.mjs"
 import { aiAnalyze, aiRewrite, aiCitation, aiGeoAudit, aiContentGap, aiExtractProfile, aiSuggest, aiGenerateContent } from "./ai.mjs"
 import {
   listProjects, getProject, createProject, updateProject, deleteProject, addAudit,
@@ -16,6 +16,7 @@ import { extractFileText, readMultipart } from "./upload.mjs"
 import { scoreSources } from "./scorer.mjs"
 import { getMetrics, seedDemoData } from "./metrics.mjs"
 import { getSchedule, updateSchedule, getLogs, setAuditCallback, initScheduler } from "./scheduler.mjs"
+import { signToken, signRefreshToken, verifyToken, authenticateUser, getUserById, setUserPassword, authMiddleware, requireRole, listUsersSafe } from "./auth.mjs"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DIST = join(__dirname, "..", "dist")
@@ -124,10 +125,61 @@ const server = createServer(async (req, res) => {
           providers: {
             deepseek: { available: !!DEEPSEEK.apiKey, model: DEEPSEEK.model },
             ark: { available: !!ARK.apiKey, model: ARK.model },
+            openai: { available: !!OPENAI.apiKey, model: OPENAI.model },
+            perplexity: { available: !!PERPLEXITY.apiKey, model: PERPLEXITY.model },
+            claude: { available: !!CLAUDE.apiKey, model: CLAUDE.model },
           },
           searchConfigured: searchConfigured(), // 联网真监测是否已配置
           searchModel: SEARCH.model,
         })
+      }
+
+      // ── 认证路由 ──
+      if (pathname === "/api/auth/login" && req.method === "POST") {
+        const body = await readBody(req)
+        const user = authenticateUser(body.name, body.password)
+        if (!user) return sendJson(res, 401, { ok: false, error: "用户名或密码错误" })
+        const payload = { sub: user.id, name: user.name, role: user.role }
+        return sendJson(res, 200, {
+          ok: true,
+          data: {
+            user: { id: user.id, name: user.name, title: user.title, role: user.role, brand: user.brand, active: !!user.active },
+            token: signToken(payload),
+            refreshToken: signRefreshToken(payload),
+          },
+        })
+      }
+
+      if (pathname === "/api/auth/refresh" && req.method === "POST") {
+        const body = await readBody(req)
+        const decoded = verifyToken(body.refreshToken)
+        if (!decoded || decoded.type !== "refresh") return sendJson(res, 401, { ok: false, error: "refresh token 无效或已过期" })
+        const payload = { sub: decoded.sub, name: decoded.name, role: decoded.role }
+        return sendJson(res, 200, { ok: true, data: { token: signToken(payload) } })
+      }
+
+      if (pathname === "/api/auth/me" && req.method === "GET") {
+        const auth = authMiddleware(req)
+        if (!auth) return sendJson(res, 401, { ok: false, error: "未登录" })
+        const user = getUserById(auth.id)
+        if (!user) return sendJson(res, 401, { ok: false, error: "用户不存在" })
+        return sendJson(res, 200, { ok: true, data: { id: user.id, name: user.name, title: user.title, role: user.role, brand: user.brand, active: !!user.active } })
+      }
+
+      if (pathname === "/api/auth/set-password" && req.method === "POST") {
+        const auth = authMiddleware(req)
+        if (!auth) return sendJson(res, 401, { ok: false, error: "未登录" })
+        if (!requireRole(auth, ["管理员"])) return sendJson(res, 403, { ok: false, error: "仅管理员可修改密码" })
+        const body = await readBody(req)
+        const ok = setUserPassword(body.userId || auth.id, body.newPassword)
+        return sendJson(res, 200, { ok, data: { success: ok } })
+      }
+
+      if (pathname === "/api/auth/users" && req.method === "GET") {
+        const auth = authMiddleware(req)
+        if (!auth) return sendJson(res, 401, { ok: false, error: "未登录" })
+        const users = listUsersSafe()
+        return sendJson(res, 200, { ok: true, data: users })
       }
 
       // ---- 客户项目 CRUD（纯存储，不需要 AI key）----

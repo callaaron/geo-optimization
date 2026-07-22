@@ -49,6 +49,38 @@ export const ARK = {
   model: ENV.ARK_LLM_MODEL || "ark-code-latest",
 }
 
+// ── v2.0 多引擎支持：OpenAI / Perplexity / Claude ──
+export const OPENAI = {
+  baseUrl: ENV.OPENAI_BASE_URL || "https://api.openai.com/v1",
+  apiKey: ENV.OPENAI_API_KEY || "",
+  model: ENV.OPENAI_MODEL || "gpt-4o",
+}
+
+export const PERPLEXITY = {
+  baseUrl: ENV.PERPLEXITY_BASE_URL || "https://api.perplexity.ai",
+  apiKey: ENV.PERPLEXITY_API_KEY || "",
+  model: ENV.PERPLEXITY_MODEL || "sonar-pro",
+}
+
+export const CLAUDE = {
+  baseUrl: ENV.CLAUDE_BASE_URL || "https://api.anthropic.com/v1",
+  apiKey: ENV.CLAUDE_API_KEY || "",
+  model: ENV.CLAUDE_MODEL || "claude-sonnet-4-20250514",
+}
+
+// 所有可用供应商列表
+export const ALL_PROVIDERS = ["deepseek", "ark", "openai", "perplexity", "claude"]
+export function getProviderConfig(provider) {
+  switch (provider) {
+    case "deepseek": return DEEPSEEK
+    case "ark": return ARK
+    case "openai": return OPENAI
+    case "perplexity": return PERPLEXITY
+    case "claude": return CLAUDE
+    default: return null
+  }
+}
+
 export const PROVIDER = (ENV.LLM_PROVIDER || (DEEPSEEK.apiKey ? "deepseek" : "ark")).toLowerCase()
 
 // CONFIG 指向「当前生效的文字模型」，兼容既有代码（index.mjs 读取 CONFIG.model/baseUrl）
@@ -159,21 +191,65 @@ export async function chat(opts) {
     return callChat(`${ARK.baseUrl}/v3/chat/completions`, ARK.apiKey, body, timeoutMs, "Ark")
   }
 
-  // 当主供应商因余额/鉴权/限流/服务端错误失败时，自动回退到另一家
-  const FALLBACK_STATUSES = new Set([401, 402, 403, 429, 500, 502, 503, 504])
-  const tryPrimary = CONFIG.provider === "deepseek" ? callDeepSeek : callArk
-  const tryFallback = CONFIG.provider === "deepseek" ? callArk : callDeepSeek
-  const hasFallback = CONFIG.provider === "deepseek" ? arkAvailable : deepseekAvailable
+  // v2.0: 通用 OpenAI 兼容调用（OpenAI / Perplexity）
+  const callOpenAICompat = async (cfg, label) => {
+    if (!cfg.apiKey) throw new ProviderError(401, label, "API key 未配置")
+    const timeoutMs = opts.timeoutMs || 90000
+    const body = { model: cfg.model, messages, temperature, max_tokens: maxTokens }
+    return callChat(`${cfg.baseUrl}/chat/completions`, cfg.apiKey, body, timeoutMs, label)
+  }
 
-  try {
-    return await tryPrimary()
-  } catch (err) {
-    const canFallback = hasFallback && err instanceof ProviderError && FALLBACK_STATUSES.has(err.status)
-    if (!canFallback) throw err
+  // v2.0: Claude Anthropic API（消息格式不同）
+  const callClaude = async () => {
+    if (!CLAUDE.apiKey) throw new ProviderError(401, "Claude", "API key 未配置")
+    const timeoutMs = opts.timeoutMs || 90000
+    const sysMsg = messages.find(m => m.role === "system")
+    const userMsgs = messages.filter(m => m.role !== "system")
+    const body = {
+      model: CLAUDE.model,
+      max_tokens: maxTokens,
+      messages: userMsgs.map(m => ({ role: "user", content: m.content })),
+    }
+    if (sysMsg) body.system = sysMsg.content
+    const resp = await fetch(`${CLAUDE.baseUrl}/messages`, {
+      method: "POST",
+      headers: {
+        "x-api-key": CLAUDE.apiKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => "")
+      throw new ProviderError(resp.status, "Claude", text)
+    }
+    const j = await resp.json()
+    return j.content?.[0]?.text || ""
+  }
+
+  // 引擎选择：直接调用指定供应商或 fallback 链
+  const provider = opts.provider || CONFIG.provider
+  const primary = provider || "ark"
+  switch (primary) {
+    case "deepseek": return safeCall(callDeepSeek, primary)
+    case "ark": return safeCall(callArk, primary)
+    case "openai": return safeCall(() => callOpenAICompat(OPENAI, "OpenAI"), "openai")
+    case "perplexity": return safeCall(() => callOpenAICompat(PERPLEXITY, "Perplexity"), "perplexity")
+    case "claude": return safeCall(callClaude, "claude")
+    default: return safeCall(callArk, "ark")
+  }
+
+  async function safeCall(fn, label) {
     try {
-      return await tryFallback()
-    } catch (err2) {
-      throw new Error(`主模型 ${CONFIG.provider} 失败（${err.message}），回退模型也失败（${err2.message || err2}）`)
+      return await fn()
+    } catch (err) {
+      // 如果主动指定了引擎且失败，尝试 fallback 到 ark
+      if (label !== "ark" && opts.provider && ARK.apiKey) {
+        try { return await callArk() } catch { /* fall through */ }
+      }
+      throw err
     }
   }
 }
