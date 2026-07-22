@@ -1,0 +1,17 @@
+node_modules
+.git
+.gitignore
+*.md
+!README.md
+.env
+.env.*
+data/
+backups/
+dist/
+.DS_Store
+*.log
+.vscode
+.idea
+screenshots
+playwright*
+tests/

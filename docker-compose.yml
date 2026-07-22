@@ -1,0 +1,47 @@
+version: "3.8"
+
+services:
+  geo:
+    build: .
+    container_name: geo-system
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    volumes:
+      # 持久化数据（SQLite + 备份 + 调度日志）
+      - geo-data:/app/data
+      # 环境变量（API Keys 等敏感配置）
+      - ./.env:/app/.env:ro
+    environment:
+      - PORT=8787
+      - NODE_ENV=production
+      - LLM_PROVIDER=${LLM_PROVIDER:-ark}
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8787/api/ai/health',r=>{process.exit(r.statusCode===200?0:1)})"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  geo-data:
+    driver: local
+
+# ── 可选：MySQL 替代 SQLite（生产环境）──
+#   mysql:
+#     image: mysql:8.0
+#     environment:
+#       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-geo123}
+#       MYSQL_DATABASE: geo
+#     volumes:
+#       - mysql-data:/var/lib/mysql
+#     ports:
+#       - "3306:3306"
+#
+#   mysql-data:
+#     driver: local

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
-import { Clock, Calendar, FileDown, BarChart3, Bell } from "lucide-react"
+import { Clock, Calendar, FileDown, BarChart3, Bell, Webhook } from "lucide-react"
 
 const SCHEDULE_PRESETS = [
   { key: "off", label: "手动", desc: "不自动运行，需手动点击「运行监测」", cron: "" },
@@ -190,6 +190,69 @@ export default function SchedulerPanel() {
           <p className="w-full text-[10px] text-muted-foreground mt-1">HTML 报告为可打印的完整诊断页；CSV 包含全部 Query 级认知数据</p>
         </CardContent>
       </Card>
+
+      {/* v3.0 Webhook 事件推送 */}
+      <WebhookConfig />
     </div>
+  )
+}
+
+// ── v3.0 Webhook 事件配置 ──
+function WebhookConfig() {
+  const [webhook, setWebhook] = useState({ enabled: false, url: "", events: { auditComplete: true, scoreChange: true, competitorAlert: true }, secret: "" })
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    fetch("/api/webhooks").then(r => r.json()).then(j => { if (j.ok) setWebhook(j.data) }).catch(() => {})
+  }, [])
+
+  async function saveWebhook() {
+    setSaving(true)
+    try {
+      const r = await fetch("/api/webhooks", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(webhook),
+      })
+      const j = await r.json()
+      if (j.ok) { toast.success("Webhook 配置已保存") } else { toast.error(j.error || "保存失败") }
+    } catch (e: any) { toast.error(e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Card className="border-border/40">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2"><Webhook className="h-4 w-4 text-primary" />Webhook 事件推送</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">启用 Webhook</span>
+          <Switch checked={webhook.enabled} onCheckedChange={v => setWebhook(w => ({ ...w, enabled: v }))} />
+        </div>
+        {webhook.enabled && (
+          <>
+            <Input placeholder="Webhook URL（接收 POST JSON）" value={webhook.url} onChange={e => setWebhook(w => ({ ...w, url: e.target.value }))} className="text-xs h-8" />
+            <Input placeholder="签名密钥（可选，HMAC-SHA256）" value={webhook.secret} onChange={e => setWebhook(w => ({ ...w, secret: e.target.value }))} className="text-xs h-8" />
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-muted-foreground">触发事件</p>
+              {[
+                { key: "auditComplete", label: "审计完成" },
+                { key: "scoreChange", label: "评分变化 >10分" },
+                { key: "competitorAlert", label: "竞品首次被AI引用" },
+              ].map((e: { key: string; label: string }) => (
+                <label key={e.key} className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={(webhook.events as any)[e.key]} onChange={ev => setWebhook(w => ({ ...w, events: { ...w.events, [e.key]: ev.target.checked } }))} className="rounded" />
+                  <span className="text-xs">{e.label}</span>
+                </label>
+              ))}
+            </div>
+            <Button size="sm" variant="outline" onClick={saveWebhook} disabled={saving || !webhook.url}>
+              <Webhook className="mr-1.5 h-3.5 w-3.5" /> 保存配置
+            </Button>
+          </>
+        )}
+        <p className="text-[10px] text-muted-foreground">审计完成/评分变化/竞品异动时自动 POST JSON 到配置的 URL。Header 含 X-GEO-Signature（HMAC-SHA256）。</p>
+      </CardContent>
+    </Card>
   )
 }

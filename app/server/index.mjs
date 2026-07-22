@@ -19,6 +19,7 @@ import { getSchedule, updateSchedule, getLogs, setAuditCallback, initScheduler }
 import { signToken, signRefreshToken, verifyToken, authenticateUser, getUserById, setUserPassword, authMiddleware, requireRole, listUsersSafe } from "./auth.mjs"
 import { checkRateLimit, checkAIRateLimit, getDailyUsage, getAllUsage } from "./ratelimit.mjs"
 import { createBackup, listBackups, restoreBackup, deleteBackup, startAutoBackup } from "./backup.mjs"
+import { getWebhookConfig, updateWebhookConfig, onAuditComplete } from "./webhook.mjs"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DIST = join(__dirname, "..", "dist")
@@ -226,6 +227,19 @@ const server = createServer(async (req, res) => {
         return sendJson(res, result.ok ? 200 : 400, result)
       }
 
+      // ── Webhook 配置 ──
+      if (pathname === "/api/webhooks" && req.method === "GET") {
+        const auth = authMiddleware(req)
+        if (!auth || !requireRole(auth, ["管理员"])) return sendJson(res, 403, { ok: false, error: "仅管理员" })
+        return sendJson(res, 200, { ok: true, data: getWebhookConfig() })
+      }
+      if (pathname === "/api/webhooks" && req.method === "PUT") {
+        const auth = authMiddleware(req)
+        if (!auth || !requireRole(auth, ["管理员"])) return sendJson(res, 403, { ok: false, error: "仅管理员" })
+        const body = await readBody(req)
+        return sendJson(res, 200, { ok: true, data: updateWebhookConfig(body) })
+      }
+
       // ---- 客户项目 CRUD（纯存储，不需要 AI key）----
       if (pathname === "/api/projects" && req.method === "GET") {
         return sendJson(res, 200, { ok: true, data: await listProjects() })
@@ -382,6 +396,8 @@ const server = createServer(async (req, res) => {
         if (!Array.isArray(body.queries) || body.queries.length === 0)
           return sendJson(res, 400, { ok: false, error: "缺少 queries（数组）" })
         const data = await aiGeoAudit(body)
+        // v3.0 Webhook：审计完成后自动推送
+        onAuditComplete(data).catch(() => {})
         return sendJson(res, 200, { ok: true, data })
       }
 
