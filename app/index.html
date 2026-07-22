@@ -1,23 +1,18 @@
 <!doctype html>
-<html lang="zh-CN" class="dark">
+<html lang="zh-CN" suppressHydrationWarning>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GEO 优化系统</title>
-    <script>
-      // 在首屏渲染前应用主题，避免深色/浅色闪烁（FOUC）
-      (function () {
-        try {
-          var t = localStorage.getItem("geo-theme")
-          if (t === "light" || t === "dark") {
-            document.documentElement.classList.toggle("dark", t === "dark")
-          }
-        } catch (e) {}
-      })()
-    </script>
+    <style>#err{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0f172a;color:#ef4444;padding:40px;font:14px monospace;white-space:pre-wrap;z-index:9999;overflow:auto}#err.show{display:block}</style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="err"></div>
+    <script>
+      window.onerror=function(m,s,l,c,e){var d=document.getElementById('err');d.className='show';d.textContent='JS ERROR\n'+m+'\n'+s+':'+l+'\n'+(e&&e.stack||'');};
+      window.addEventListener('unhandledrejection',function(e){var d=document.getElementById('err');d.className='show';d.textContent='PROMISE ERROR\n'+e.reason+'\n'+(e.reason&&e.reason.stack||'');});
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

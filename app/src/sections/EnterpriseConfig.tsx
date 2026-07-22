@@ -264,7 +264,7 @@ export function EnterpriseConfig({
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center gap-2 text-base">
           <Radar className="h-4 w-4 text-emerald-400" /> 企业监测配置
-          <Badge variant="secondary" className="ml-1 text-[10px]">监控台</Badge>
+          <Badge variant="secondary" className="ml-1 text-xs">监控台</Badge>
           <Button
             size="sm"
             variant="outline"
@@ -330,7 +330,7 @@ export function EnterpriseConfig({
               </Button>
             )}
           </div>
-          <p className="mt-1.5 text-[10px] text-muted-foreground">
+          <p className="mt-1.5 text-xs text-muted-foreground">
             上传企业材料或输入品牌名 → 系统提炼候选内容，以按钮形式附在各字段下方，<span className="text-emerald-500">由你点击确认填入</span>，不会自动覆盖已有内容。
           </p>
         </div>
@@ -348,7 +348,7 @@ export function EnterpriseConfig({
                     {f.label}
                     {f.required && <span className="ml-0.5 text-destructive">*</span>}
                   </label>
-                  <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground" title={f.help}>
+                  <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground" title={f.help}>
                     <Info className="h-3 w-3" /> 说明
                   </span>
                 </div>
@@ -373,17 +373,17 @@ export function EnterpriseConfig({
                   />
                 )}
                 {/* 字段说明 */}
-                <p className="text-[10px] leading-relaxed text-muted-foreground">{f.help}</p>
+                <p className="text-xs leading-relaxed text-muted-foreground">{f.help}</p>
                 {/* 候选建议按钮 */}
                 {showCand && (
                   <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 p-2">
-                    <p className="mb-1 text-[10px] font-medium text-emerald-600">候选建议（点击填入）：</p>
+                    <p className="mb-1 text-xs font-medium text-emerald-600">候选建议（点击填入）：</p>
                     <div className="flex flex-wrap gap-1.5">
                       {typeof cand === "string" ? (
                         <button
                           disabled={isSingleApplied(f.key as "brand" | "domain", cand)}
                           onClick={() => applySingle(f.key as "brand" | "domain", cand)}
-                          className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-600 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
+                          className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-600 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
                         >
                           {isSingleApplied(f.key as "brand" | "domain", cand) ? "✓ 已填入" : cand}
                         </button>
@@ -393,7 +393,7 @@ export function EnterpriseConfig({
                             key={i}
                             disabled={isLineApplied(f.key as "competitors" | "queries" | "intended", line)}
                             onClick={() => applyLine(f.key as "competitors" | "queries" | "intended", line)}
-                            className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-600 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
+                            className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-600 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
                           >
                             {isLineApplied(f.key as "competitors" | "queries" | "intended", line) ? "✓ " : "+ "}
                             {line}

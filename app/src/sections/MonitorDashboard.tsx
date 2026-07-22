@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import AuditDeepDive from "@/sections/AuditDeepDive"
 import { Separator } from "@/components/ui/separator"
 import { EmptyState } from "@/components/EmptyState"
 import { EnterpriseConfig, EMPTY_CONFIG, type Config } from "@/sections/EnterpriseConfig"
@@ -106,10 +107,10 @@ function RelevanceBar({ value }: { value: number }) {
 
 function StatusBadge({ status }: { status: ContentPointTracking["status"] }) {
   if (status === "收录")
-    return <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px]">已收录</Badge>
+    return <Badge className="bg-emerald-500/20 text-emerald-400 text-xs">已收录</Badge>
   if (status === "部分")
-    return <Badge className="bg-yellow-500/20 text-yellow-400 text-[10px]">部分</Badge>
-  return <Badge className="bg-destructive/20 text-destructive text-[10px]">未出现</Badge>
+    return <Badge className="bg-yellow-500/20 text-yellow-400 text-xs">部分</Badge>
+  return <Badge className="bg-destructive/20 text-destructive text-xs">未出现</Badge>
 }
 
 const SCORE_DIMS: { key: string; label: string }[] = [
@@ -157,9 +158,9 @@ function SourceRow({ s }: { s: GeoAuditSource }) {
           </span>
         )}
         {s.citedByAi ? (
-          <Badge className="shrink-0 bg-violet-500/20 text-violet-300 text-[10px]">被 AI 引用</Badge>
+          <Badge className="shrink-0 bg-violet-500/20 text-violet-300 text-xs">被 AI 引用</Badge>
         ) : (
-          <Badge variant="secondary" className="shrink-0 text-[10px]">未引用</Badge>
+          <Badge variant="secondary" className="shrink-0 text-xs">未引用</Badge>
         )}
         <div className="flex shrink-0 items-center gap-2">
           <RelevanceBar value={s.relevance} />
@@ -168,7 +169,7 @@ function SourceRow({ s }: { s: GeoAuditSource }) {
       </button>
       {open && s.scores && (
         <div className="space-y-1.5 border-t border-border/60 px-3 py-2.5">
-          <p className="text-[10px] font-medium text-muted-foreground">5 维内容质量评分（综合 {score}）</p>
+          <p className="text-xs font-medium text-muted-foreground">5 维内容质量评分（综合 {score}）</p>
           {SCORE_DIMS.map((d) => (
             <ScoreBar key={d.key} label={d.label} value={s.scores![d.key] ?? 0} />
           ))}
@@ -206,14 +207,14 @@ function QueryCard({
         </span>
         <div className="flex shrink-0 items-center gap-2">
           {q.inSerp ? (
-            <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px]">SERP ✓</Badge>
+            <Badge className="bg-emerald-500/20 text-emerald-400 text-xs">SERP ✓</Badge>
           ) : (
-            <Badge className="bg-destructive/20 text-destructive text-[10px]">SERP ✗</Badge>
+            <Badge className="bg-destructive/20 text-destructive text-xs">SERP ✗</Badge>
           )}
           {q.inAiAnswer ? (
-            <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px]">AI ✓</Badge>
+            <Badge className="bg-emerald-500/20 text-emerald-400 text-xs">AI ✓</Badge>
           ) : (
-            <Badge className="bg-destructive/20 text-destructive text-[10px]">AI ✗</Badge>
+            <Badge className="bg-destructive/20 text-destructive text-xs">AI ✗</Badge>
           )}
         </div>
       </button>
@@ -247,11 +248,11 @@ function QueryCard({
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-medium text-violet-400">
-                ② AI 回答情况 <span className="text-[10px] text-muted-foreground">（基于真实 360 搜索的 RAG 综合 · 多 AI 适配器预留）</span>
+                ② AI 回答情况 <span className="text-xs text-muted-foreground">（基于真实 360 搜索的 RAG 综合 · 多 AI 适配器预留）</span>
               </p>
               {q.level && (
                 <Badge
-                  className="text-[10px]"
+                  className="text-xs"
                   style={{ background: `${citationLevelColor(q.level)}22`, color: citationLevelColor(q.level) }}
                 >
                   {q.levelLabel || q.level}
@@ -264,7 +265,7 @@ function QueryCard({
             {q.brandsInAnswer.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {q.brandsInAnswer.map((b) => (
-                  <Badge key={b} variant="secondary" className="text-[10px]">
+                  <Badge key={b} variant="secondary" className="text-xs">
                     {b}
                   </Badge>
                 ))}
@@ -499,7 +500,7 @@ export function MonitorDashboard() {
           {/* 4 级 AI 认知分布 */}
           <div className="rounded-lg border border-border p-3">
             <p className="mb-2 text-xs font-medium text-muted-foreground">
-              AI 认知层级分布 <span className="text-[10px]">（每条 query 的品牌被引用深度）</span>
+              AI 认知层级分布 <span className="text-xs">（每条 query 的品牌被引用深度）</span>
             </p>
             <div className="flex flex-wrap gap-2">
               {(["direct", "indirect", "triggerable", "none"] as const).map((lv) => {
@@ -557,11 +558,11 @@ export function MonitorDashboard() {
                       <p className="truncate text-xs text-muted-foreground">{s.url}</p>
                     </div>
                     {s.citedCount > 0 ? (
-                      <Badge className="shrink-0 bg-violet-500/20 text-violet-300 text-[10px]">
+                      <Badge className="shrink-0 bg-violet-500/20 text-violet-300 text-xs">
                         被引 {s.citedCount} 次
                       </Badge>
                     ) : (
-                      <Badge variant="secondary" className="shrink-0 text-[10px]">未引用</Badge>
+                      <Badge variant="secondary" className="shrink-0 text-xs">未引用</Badge>
                     )}
                     <div className="flex shrink-0 items-center gap-2">
                       <RelevanceBar value={s.avgRelevance} />
@@ -682,6 +683,7 @@ export function MonitorDashboard() {
               <FileDown className="mr-1 h-3.5 w-3.5" /> 导出监测报告
             </Button>
           </div>
+          <AuditDeepDive result={result} />
         </>
       ) : (
         <EmptyState

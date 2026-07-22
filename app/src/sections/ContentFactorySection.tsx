@@ -133,7 +133,7 @@ export function ContentFactorySection({ draft }: Props) {
                     <I className={`h-4 w-4 shrink-0 ${active ? f.color : "text-muted-foreground"}`} />
                     <span className="min-w-0">
                       <span className="block text-sm font-medium">{f.label}</span>
-                      <span className="block truncate text-[10px] text-muted-foreground">{f.desc}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{f.desc}</span>
                     </span>
                   </button>
                 )
@@ -214,7 +214,7 @@ function ResultView({ format, r }: { format: ContentFormat; r: ContentFormatResu
           {(r.sections || []).map((s, i) => (
             <div key={i} className="rounded-lg border p-3">
               <div className="flex items-center gap-2">
-                <Badge variant="secondary" className="text-[10px]">{s.type}</Badge>
+                <Badge variant="secondary" className="text-xs">{s.type}</Badge>
                 <span className="text-sm font-medium">{s.headline || s.title || ""}</span>
               </div>
               {s.subheadline && <p className="mt-1 text-xs text-muted-foreground">{s.subheadline}</p>}
@@ -234,7 +234,7 @@ function ResultView({ format, r }: { format: ContentFormat; r: ContentFormatResu
             <p className="mb-1 text-xs text-muted-foreground">关键实体（建议标记 Schema）</p>
             <div className="flex flex-wrap gap-1.5">
               {r.keyEntities.map((e, i) => (
-                <Badge key={i} variant="outline" className="text-[10px]">{e}</Badge>
+                <Badge key={i} variant="outline" className="text-xs">{e}</Badge>
               ))}
             </div>
           </div>
@@ -251,7 +251,7 @@ function ResultView({ format, r }: { format: ContentFormat; r: ContentFormatResu
           {r.tags && r.tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {r.tags.map((t, i) => (
-                <Badge key={i} variant="secondary" className="text-[10px]">
+                <Badge key={i} variant="secondary" className="text-xs">
                   <Hash className="mr-0.5 h-2.5 w-2.5" />
                   {t}
                 </Badge>

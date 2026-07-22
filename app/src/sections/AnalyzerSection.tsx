@@ -166,7 +166,7 @@ export function AnalyzerSection({ draft, setDraft, result, onResult, onGoto, onS
               </div>
             </div>
             {geoMode === "b2b" && (
-              <p className="rounded-md bg-emerald-500/10 px-2.5 py-1.5 text-[11px] text-emerald-300/90">
+              <p className="rounded-md bg-emerald-500/10 px-2.5 py-1.5 text-xs text-emerald-300/90">
                 将额外评估「B2B 转化信号」（产品规格 / 客户实证 / 资质信任 / 转化路径 / 选型对比），更贴合面向企业客户的官网与商单内容。
               </p>
             )}

@@ -18,6 +18,8 @@ import {
 import { buildAuditReport } from "./report.mjs"
 import { extractFileText, readMultipart } from "./upload.mjs"
 import { scoreSources } from "./scorer.mjs"
+import { getMetrics, seedDemoData } from "./metrics.mjs"
+import { listUsers, getUser, createUser, updateUser, deleteUser } from "./users.mjs"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DIST = join(__dirname, "..", "dist")
@@ -171,6 +173,52 @@ const server = createServer(async (req, res) => {
         if (!files.length) return sendJson(res, 400, { ok: false, error: "未上传文件" })
         const result = await extractFileText(files[0])
         return sendJson(res, 200, { ok: true, data: result })
+      }
+
+      // ── 数据大屏聚合接口（不需要 AI key）──
+      if (pathname === "/api/metrics" && req.method === "GET") {
+        const data = await getMetrics()
+        return sendJson(res, 200, { ok: true, data })
+      }
+
+      // ── 演示种子数据（不需要 AI key）──
+      if (pathname === "/api/demo/seed" && req.method === "POST") {
+        const data = await seedDemoData()
+        return sendJson(res, 200, { ok: true, data })
+      }
+
+      // ── 多用户/团队管理（不需要 AI key）──
+      if (pathname === "/api/users" && req.method === "GET") {
+        const data = await listUsers()
+        return sendJson(res, 200, { ok: true, data })
+      }
+
+      if (pathname === "/api/users" && req.method === "POST") {
+        const body = await readBody(req)
+        if (!body.name || !String(body.name).trim())
+          return sendJson(res, 400, { ok: false, error: "缺少 name" })
+        const data = await createUser(body)
+        return sendJson(res, 200, { ok: true, data })
+      }
+
+      const userMatch = pathname.match(/^\/api\/users\/([^/]+)$/)
+      if (userMatch && req.method === "GET") {
+        const data = await getUser(decodeURIComponent(userMatch[1]))
+        if (!data) return sendJson(res, 404, { ok: false, error: "用户不存在" })
+        return sendJson(res, 200, { ok: true, data })
+      }
+
+      if (userMatch && req.method === "PUT") {
+        const body = await readBody(req)
+        const data = await updateUser(decodeURIComponent(userMatch[1]), body)
+        if (!data) return sendJson(res, 404, { ok: false, error: "用户不存在" })
+        return sendJson(res, 200, { ok: true, data })
+      }
+
+      if (userMatch && req.method === "DELETE") {
+        const done = await deleteUser(decodeURIComponent(userMatch[1]))
+        if (!done) return sendJson(res, 404, { ok: false, error: "用户不存在" })
+        return sendJson(res, 200, { ok: true })
       }
 
       if (!isConfigured()) {

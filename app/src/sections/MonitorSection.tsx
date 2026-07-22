@@ -327,7 +327,7 @@ export function MonitorSection({
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Search className="h-4 w-4 text-violet-400" /> 真·GEO 引用审计
-            <Badge variant="secondary" className="ml-1 text-[10px]">RAG 搜索</Badge>
+            <Badge variant="secondary" className="ml-1 text-xs">RAG 搜索</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -424,14 +424,14 @@ export function MonitorSection({
                       <span className="min-w-0 flex-1 truncate text-sm font-medium">{q.query}</span>
                       <div className="flex shrink-0 items-center gap-2">
                         {q.inSerp ? (
-                          <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px]">SERP ✓</Badge>
+                          <Badge className="bg-emerald-500/20 text-emerald-400 text-xs">SERP ✓</Badge>
                         ) : (
-                          <Badge className="bg-destructive/20 text-destructive text-[10px]">SERP ✗</Badge>
+                          <Badge className="bg-destructive/20 text-destructive text-xs">SERP ✗</Badge>
                         )}
                         {q.inAiAnswer ? (
-                          <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px]">AI ✓</Badge>
+                          <Badge className="bg-emerald-500/20 text-emerald-400 text-xs">AI ✓</Badge>
                         ) : (
-                          <Badge className="bg-destructive/20 text-destructive text-[10px]">AI ✗</Badge>
+                          <Badge className="bg-destructive/20 text-destructive text-xs">AI ✗</Badge>
                         )}
                       </div>
                     </button>
@@ -458,7 +458,7 @@ export function MonitorSection({
                         {(q.brandsInSerp.length > 0 || q.brandsInAnswer.length > 0) && (
                           <div className="flex flex-wrap gap-1.5">
                             {q.brandsInAnswer.filter((b) => !q.brandsInSerp.includes(b)).map((b) => (
-                              <Badge key={b} variant="secondary" className="text-[10px]">{b}</Badge>
+                              <Badge key={b} variant="secondary" className="text-xs">{b}</Badge>
                             ))}
                           </div>
                         )}

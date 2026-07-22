@@ -85,9 +85,9 @@ function fmtTime(ts: string | number): string {
 }
 
 function priorityBadge(p: number) {
-  if (p >= 3) return <Badge className="bg-destructive/20 text-destructive text-[10px]">P{p} 高优先</Badge>
-  if (p === 2) return <Badge className="bg-amber-500/20 text-amber-400 text-[10px]">P{p} 中优先</Badge>
-  return <Badge className="bg-muted text-muted-foreground text-[10px]">P{p} 低优先</Badge>
+  if (p >= 3) return <Badge className="bg-destructive/20 text-destructive text-xs">P{p} 高优先</Badge>
+  if (p === 2) return <Badge className="bg-amber-500/20 text-amber-400 text-xs">P{p} 中优先</Badge>
+  return <Badge className="bg-muted text-muted-foreground text-xs">P{p} 低优先</Badge>
 }
 
 function Delta({ curr, prev, suffix = "" }: { curr: number; prev: number; suffix?: string }) {
@@ -613,18 +613,18 @@ export function WorkflowSection({ onGoto, setDraft }: Props) {
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">{q.query}</span>
                     <div className="flex shrink-0 items-center gap-2">
                       {q.error ? (
-                        <Badge className="bg-amber-500/20 text-amber-400 text-[10px]">出错</Badge>
+                        <Badge className="bg-amber-500/20 text-amber-400 text-xs">出错</Badge>
                       ) : (
                         <>
                           {q.inSerp ? (
-                            <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px]">SERP ✓</Badge>
+                            <Badge className="bg-emerald-500/20 text-emerald-400 text-xs">SERP ✓</Badge>
                           ) : (
-                            <Badge className="bg-destructive/20 text-destructive text-[10px]">SERP ✗</Badge>
+                            <Badge className="bg-destructive/20 text-destructive text-xs">SERP ✗</Badge>
                           )}
                           {q.inAiAnswer ? (
-                            <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px]">AI ✓</Badge>
+                            <Badge className="bg-emerald-500/20 text-emerald-400 text-xs">AI ✓</Badge>
                           ) : (
-                            <Badge className="bg-destructive/20 text-destructive text-[10px]">AI ✗</Badge>
+                            <Badge className="bg-destructive/20 text-destructive text-xs">AI ✗</Badge>
                           )}
                         </>
                       )}
@@ -656,7 +656,7 @@ export function WorkflowSection({ onGoto, setDraft }: Props) {
                       {((q.brandsInAnswer?.length ?? 0) > 0 || (q.brandsInSerp?.length ?? 0) > 0) && (
                         <div className="flex flex-wrap gap-1.5">
                           {[...new Set([...(q.brandsInSerp ?? []), ...(q.brandsInAnswer ?? [])])].map((b) => (
-                            <Badge key={b} variant="secondary" className="text-[10px]">
+                            <Badge key={b} variant="secondary" className="text-xs">
                               {b}
                             </Badge>
                           ))}
@@ -750,7 +750,7 @@ export function WorkflowSection({ onGoto, setDraft }: Props) {
                       <p className="text-sm font-medium">{item.topic}</p>
                       <div className="flex shrink-0 items-center gap-2">
                         {priorityBadge(item.priority)}
-                        <Badge variant="secondary" className="text-[10px]">
+                        <Badge variant="secondary" className="text-xs">
                           {item.platform}
                         </Badge>
                       </div>
