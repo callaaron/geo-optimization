@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Search, Brain, Globe, Cpu } from "lucide-react"
+import { Loader2, Brain, Globe, Cpu } from "lucide-react"
 
 interface EngineStatus { available: boolean; model: string }
 interface HealthData {

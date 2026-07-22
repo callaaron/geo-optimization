@@ -1,7 +1,7 @@
 // 数据大屏聚合：从 projects.json 读取所有项目+审计 → 产出 KPI/图表数据
 // 纯 Node, JSON 持久化，零新增依赖。
 // 参考：gego 的 dashboard stats 聚合层，简化适配本系统 JSON 文件存储。
-import { listProjects, createProject, addAudit } from "./project.mjs"
+import { listProjects, createProject, addAudit } from "./db.mjs"
 
 const CITATION_LEVELS = { direct: "直接引用", indirect: "间接提及", triggerable: "可触发提及", none: "未提及" }
 const LEVEL_SCORE = { direct: 100, indirect: 60, triggerable: 30, none: 0 }

@@ -8,18 +8,13 @@ import { dirname, join, extname, normalize } from "node:path"
 import { isConfigured, searchConfigured, SEARCH, CONFIG, DEEPSEEK, ARK } from "./ark.mjs"
 import { aiAnalyze, aiRewrite, aiCitation, aiGeoAudit, aiContentGap, aiExtractProfile, aiSuggest, aiGenerateContent } from "./ai.mjs"
 import {
-  listProjects,
-  getProject,
-  createProject,
-  updateProject,
-  deleteProject,
-  addAudit,
-} from "./project.mjs"
+  listProjects, getProject, createProject, updateProject, deleteProject, addAudit,
+  listUsers, getUser, createUser, updateUser, deleteUser,
+} from "./db.mjs"
 import { buildAuditReport } from "./report.mjs"
 import { extractFileText, readMultipart } from "./upload.mjs"
 import { scoreSources } from "./scorer.mjs"
 import { getMetrics, seedDemoData } from "./metrics.mjs"
-import { listUsers, getUser, createUser, updateUser, deleteUser } from "./users.mjs"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DIST = join(__dirname, "..", "dist")

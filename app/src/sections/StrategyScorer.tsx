@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Zap, Loader2 } from "lucide-react"
+import { Zap } from "lucide-react"
 
 // Princeton 9 策略 + 权重（基于论文实测效果排序）
 const STRATEGIES = [

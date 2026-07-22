@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import "./App.css"
 import type { GeoAnalysis, GeoInput } from "@/types/geo"
 import { WorkflowSection } from "@/sections/WorkflowSection"
@@ -22,6 +22,7 @@ import ContentSopSection from "@/sections/ContentSopSection"
 import StrategyScorer from "@/sections/StrategyScorer"
 import EnginePanel from "@/sections/EnginePanel"
 import SchedulerPanel from "@/sections/SchedulerPanel"
+import DoctorDiagnostic from "@/sections/DoctorDiagnostic"
 import TeamSection from "@/sections/TeamSection"
 
 type Tab = "dashboard" | "monitor" | "audit" | "optimize" | "deploy" | "compete" | "reports"
@@ -38,7 +39,9 @@ const NAV: { key: Tab; label: string; icon: typeof BarChart3; step: number }[] =
 
 const TAB_META: Record<Tab, { title: string; desc: string; subs?: { key: string; label: string }[] }> = {
   dashboard: { title: "GEO 看板", desc: "全局 KPI · 引文层级 · 品牌趋势 · 竞品动态" },
-  monitor: { title: "品牌监测", desc: "配置品牌/域名/竞品/查询词 · 运行 AI 引擎检测 · 查看检测结果" },
+  monitor: { title: "品牌监测", desc: "配置品牌/域名/竞品/查询词 · 运行 AI 引擎检测 · 查看检测结果", subs: [
+    { key: "config", label: "监测配置" }, { key: "doctor", label: "页面诊断" },
+  ]},
   audit: { title: "审计与趋势", desc: "历史审计记录 · GEO 评分趋势 · 报告导出", subs: [
     { key: "trends", label: "历史趋势" }, { key: "reports", label: "报告导出" },
   ]},
@@ -69,6 +72,9 @@ export default function App() {
   function handleSaveLatest() { if (analysis) handleSave(analysis) }
 
   const meta = TAB_META[tab]
+
+  // 浏览器标题随 Tab 切换
+  useEffect(() => { document.title = `${meta.title} — GEO 优化系统` }, [tab, meta.title])
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
@@ -135,11 +141,16 @@ export default function App() {
           {/* ① 看板 */}
           {tab === "dashboard" && <DataScreenSection />}
 
-          {/* ② 监测：配置 + 运行审计 */}
+          {/* ② 监测：配置 + 运行审计 / 页面诊断 */}
           {tab === "monitor" && (
             <div className="space-y-5">
-              <EnginePanel />
-              <MonitorDashboard />
+              {(!sub || sub === "config") && (
+                <>
+                  <EnginePanel />
+                  <MonitorDashboard />
+                </>
+              )}
+              {sub === "doctor" && <DoctorDiagnostic />}
             </div>
           )}
 
@@ -188,6 +199,23 @@ export default function App() {
       )}
 
       <Toaster richColors position="top-center" />
+
+      {/* ── 移动端底部 Tab 栏 ── */}
+      <nav className="fixed bottom-0 left-0 right-0 z-50 flex border-t border-border bg-card md:hidden">
+        {NAV.map(n => {
+          const active = tab === n.key
+          const Icon = n.icon
+          return (
+            <button key={n.key} onClick={() => setTab(n.key)}
+              className={`flex-1 flex flex-col items-center justify-center py-1.5 text-[10px] font-medium transition-colors ${
+                active ? "text-primary" : "text-muted-foreground"
+              }`}>
+              <Icon className="h-4 w-4 mb-0.5" />
+              {n.label}
+            </button>
+          )
+        })}
+      </nav>
     </div>
   )
 }
