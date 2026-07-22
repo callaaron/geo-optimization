@@ -12,10 +12,12 @@ import { Copy, Download, FileCode2 } from "lucide-react"
 interface Props {
   draft: GeoInput
   setDraft: (updater: (prev: GeoInput) => GeoInput) => void
+  sub?: string
 }
 
-export function GeneratorSection({ draft, setDraft }: Props) {
+export function GeneratorSection({ draft, setDraft, sub }: Props) {
   const [assets, setAssets] = useState<ReturnType<typeof generateAssets> | null>(null)
+  const activeTab = sub === "llms" ? "llms" : "schema"
 
   function handleGenerate() {
     if (!draft.text.trim() && !draft.html) {
@@ -103,7 +105,7 @@ export function GeneratorSection({ draft, setDraft }: Props) {
               <CardTitle className="text-base">部署产物</CardTitle>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="llms" className="w-full">
+              <Tabs defaultValue={activeTab} className="w-full">
                 <TabsList className="grid w-full grid-cols-5">
                   {files.map((f) => (
                     <TabsTrigger key={f.key} value={f.key} className="text-xs">

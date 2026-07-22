@@ -80,8 +80,9 @@
     line-height: 1.3;
   }
   /* 全局最小可读字号 */
-  .text-xs { font-size: 0.8125rem; }  /* 13px at 16px base */
-  .text-sm { font-size: 0.9375rem; }  /* 15px at 16px base */
+  .text-xs { font-size: 0.8125rem; }  /* 13px at 16px base — 仅辅助标注 */
+  .text-sm { font-size: 0.9375rem; }  /* 15px at 16px base — 正文 */
+  .text-base { font-size: 1rem; }      /* 16px — 卡片标题 */
 
   /* 卡片阴影统一 */
   .card-shadow {
