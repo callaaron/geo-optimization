@@ -173,7 +173,7 @@ export function EnterpriseConfig({
   onReset,
 }: Props) {
   const [candidates, setCandidates] = useState<Candidates | null>(null)
-  const [acq, setAcq] = useState<"upload" | "query" | null>(null)
+  const [acq, setAcq] = useState<"upload" | "query" | "expand" | null>(null)
   const [dirty, setDirty] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -232,15 +232,11 @@ export function EnterpriseConfig({
 
   async function handleSuggest() {
     const b = value.brand.trim()
-    if (!b) {
-      toast.error("请先在「品牌名」填写企业名称")
-      return
-    }
+    if (!b) { toast.error("请先在「品牌名」填写企业名称"); return }
     setAcq("query")
     try {
       const res = await fetch("/api/ai/suggest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ brand: b }),
       })
       const j = await res.json()
@@ -252,11 +248,34 @@ export function EnterpriseConfig({
         setCandidates(c)
         toast.success("已生成候选内容，点击下方按钮填入对应字段")
       }
-    } catch (e) {
-      toast.error(String((e as Error)?.message || e))
-    } finally {
-      setAcq(null)
-    }
+    } catch (e) { toast.error(String((e as Error)?.message || e)) }
+    finally { setAcq(null) }
+  }
+
+  // v2.5 智能 Query 扩展：基于品牌+已有Query推荐新高价值Query
+  async function handleExpandQueries() {
+    const b = value.brand.trim()
+    if (!b) { toast.error("请先在「品牌名」填写企业名称"); return }
+    setAcq("expand")
+    try {
+      const res = await fetch("/api/geo/expand-queries", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brand: b,
+          domain: value.domain.trim() || undefined,
+          existingQueries: parseLines(value.queries),
+          competitors: parseLines(value.competitors),
+        }),
+      })
+      const j = await res.json()
+      if (!j.ok || !j.data?.length) throw new Error(j.error || "未生成推荐 Query")
+      // 将推荐的 query 追加到现有 queries 后面
+      const newQueries = j.data.map((item: any) => item.query).join("\n")
+      const current = value.queries.trim()
+      onChange({ ...value, queries: current ? current + "\n" + newQueries : newQueries })
+      toast.success(`已添加 ${j.data.length} 条推荐 Query`)
+    } catch (e) { toast.error(String((e as Error)?.message || e)) }
+    finally { setAcq(null) }
   }
 
   function clearCandidates() {
@@ -329,6 +348,19 @@ export function EnterpriseConfig({
                 <Sparkles className="mr-1 h-3.5 w-3.5" />
               )}
               AI 生成候选（基于品牌名）
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={acq !== null || !value.brand.trim()}
+              onClick={handleExpandQueries}
+            >
+              {acq === "expand" ? (
+                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Lightbulb className="mr-1 h-3.5 w-3.5" />
+              )}
+              智能扩展 Query
             </Button>
             {hasCandidates && (
               <Button size="sm" variant="ghost" onClick={clearCandidates}>

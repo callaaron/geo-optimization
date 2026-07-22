@@ -6,7 +6,7 @@ import { readFile, stat } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 import { dirname, join, extname, normalize } from "node:path"
 import { isConfigured, searchConfigured, SEARCH, CONFIG, DEEPSEEK, ARK, OPENAI, PERPLEXITY, CLAUDE, ALL_PROVIDERS, getProviderConfig } from "./ark.mjs"
-import { aiAnalyze, aiRewrite, aiCitation, aiGeoAudit, aiContentGap, aiExtractProfile, aiSuggest, aiGenerateContent } from "./ai.mjs"
+import { aiAnalyze, aiRewrite, aiCitation, aiGeoAudit, aiContentGap, aiExtractProfile, aiSuggest, aiGenerateContent, aiExpandQueries, calcHealthScore, aiGenerateGeoContent } from "./ai.mjs"
 import {
   listProjects, getProject, createProject, updateProject, deleteProject, addAudit,
   listUsers, getUser, createUser, updateUser, deleteUser,
@@ -435,6 +435,29 @@ const server = createServer(async (req, res) => {
         if (!auditResult || typeof auditResult !== "object")
           return sendJson(res, 400, { ok: false, error: "缺少 auditResult（aiGeoAudit 结果）" })
         const data = await aiContentGap({ ...body, brand, auditResult })
+        return sendJson(res, 200, { ok: true, data })
+      }
+
+      // ── v2.5 智能 Query 扩展 ──
+      if (pathname === "/api/geo/expand-queries" && req.method === "POST") {
+        if (!checkAILimit()) return
+        const body = await readBody(req)
+        const data = await aiExpandQueries(body)
+        return sendJson(res, 200, { ok: true, data })
+      }
+
+      // ── v2.5 内容健康度评分 ──
+      if (pathname === "/api/geo/health-score" && req.method === "POST") {
+        const body = await readBody(req)
+        const data = calcHealthScore(body.auditResult)
+        return sendJson(res, 200, { ok: true, data })
+      }
+
+      // ── v2.5 自动 GEO 内容生成（差距修复）──
+      if (pathname === "/api/geo/generate-content" && req.method === "POST") {
+        if (!checkAILimit()) return
+        const body = await readBody(req)
+        const data = await aiGenerateGeoContent(body)
         return sendJson(res, 200, { ok: true, data })
       }
 

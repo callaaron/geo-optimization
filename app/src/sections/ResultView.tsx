@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import type { GeoAuditResult, GeoAuditPerQuery, GeoAuditSource } from "@/lib/ai/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -198,6 +198,19 @@ interface ResultViewProps {
 export function ResultView({ result, competitors, queries, intended, onSaveComplete, savedId }: ResultViewProps) {
   const [expanded, setExpanded] = useState<string | null>(result.perQuery[0]?.query ?? null)
   const [trackFilter, setTrackFilter] = useState<"all" | "收录" | "部分" | "未出现">("all")
+  const [healthScore, setHealthScore] = useState<any>(null)
+
+  // v2.5: 计算内容健康度评分
+  useEffect(() => {
+    fetch("/api/geo/health-score", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ auditResult: result }),
+    })
+      .then(r => r.json())
+      .then(j => { if (j.ok) setHealthScore(j.data) })
+      .catch(() => {})
+  }, [result])
 
   const includedRate = useMemo(() => {
     if (!result.intendedCount) return null
@@ -291,6 +304,44 @@ export function ResultView({ result, competitors, queries, intended, onSaveCompl
           </p>
         </div>
       </div>
+
+      {/* v2.5 内容健康度评分 */}
+      {healthScore && (
+        <div className="rounded-lg border border-border p-4">
+          <div className="flex items-center gap-3 mb-3">
+            <div
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-lg font-bold"
+              style={{
+                background: healthScore.score >= 80 ? "#10b98122" : healthScore.score >= 60 ? "#f59e0b22" : "#ef444422",
+                color: healthScore.score >= 80 ? "#10b981" : healthScore.score >= 60 ? "#f59e0b" : "#ef4444",
+              }}
+            >
+              {healthScore.score}
+            </div>
+            <div>
+              <p className="text-sm font-medium">GEO 健康度评分</p>
+              <p className="text-xs text-muted-foreground">
+                综合 5 维度加权 · 评级 <Badge className="ml-1 text-xs" style={{ background: healthScore.grade === "A" ? "#10b98122" : healthScore.grade === "B" ? "#f59e0b22" : "#ef444422", color: healthScore.grade === "A" ? "#10b981" : healthScore.grade === "B" ? "#f59e0b" : "#ef4444" }}>{healthScore.grade}</Badge>
+              </p>
+            </div>
+          </div>
+          {/* 5维分解 */}
+          <div className="grid grid-cols-5 gap-2">
+            {healthScore.breakdown && Object.entries(healthScore.breakdown).map(([key, raw]) => {
+              const dim = raw as any
+              return (
+              <div key={key} className="text-center">
+                <div className="mx-auto h-1.5 w-full overflow-hidden rounded-full bg-muted mb-1">
+                  <div className="h-full rounded-full" style={{ width: `${(dim.score / dim.weight) * 100}%`, background: dim.score / dim.weight >= 0.7 ? "#10b981" : dim.score / dim.weight >= 0.4 ? "#f59e0b" : "#ef4444" }} />
+                </div>
+                <p className="text-[10px] text-muted-foreground">{dim.label}</p>
+                <p className="text-xs font-bold tabular-nums">{dim.score}/{dim.weight}</p>
+              </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* 4 级 AI 认知分布 */}
       <div className="rounded-lg border border-border p-3">

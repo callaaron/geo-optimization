@@ -783,3 +783,108 @@ export async function aiGenerateContent({ text, title = "", format = "article", 
   const json = await chatJson({ system: cfg.system, user: cfg.user, temperature: 0.6, maxTokens: 4096 })
   return json
 }
+
+// ── v2.5 智能 Query 扩展：基于品牌/竞品/已有Query推荐新高价值Query ──
+export async function aiExpandQueries({ brand, domain, existingQueries = [], competitors = [] }) {
+  const system = "你是 SEO/GEO 专家。基于品牌信息和已有监测 query，推荐新的高价值搜索 query。只输出 JSON 数组。"
+  const user = `品牌：${brand}${domain ? `\n域名：${domain}` : ""}
+${existingQueries.length ? `已有监测 Query：\n${existingQueries.map((q, i) => `${i + 1}. ${q}`).join("\n")}` : "暂无已有 Query"}
+${competitors.length ? `竞品品牌：${competitors.join("、")}` : ""}
+
+请推荐 5-10 条新的高价值监测 Query，覆盖以下维度：
+- 品类词（用户可能搜索的产品/服务类别）
+- 场景词（用户在不同使用场景下的搜索）
+- 对比词（品牌对比、产品对比类搜索）
+- 长尾词（更具体的细分需求）
+- 意图词（购买/询价/技术支持等意图明确的搜索）
+
+只返回 JSON 数组，每条包含 query 和 reason：
+[{"query":"...","reason":"..."}]`
+
+  const json = await chatJson({ system, user, temperature: 0.5, maxTokens: 2000 })
+  const arr = Array.isArray(json) ? json : Array.isArray(json?.queries) ? json.queries : []
+  return arr.filter(s => s && typeof s.query === "string" && s.query.trim())
+}
+
+// ── v2.5 内容健康度综合评分（0-100）──
+export function calcHealthScore(auditResult) {
+  if (!auditResult) return { score: 0, breakdown: {} }
+
+  // 引用率（30%）：AI 是否引用了品牌
+  const citation = (auditResult.aiCitationRate || 0) / 100 * 30
+
+  // 搜索可见度（25%）：SERP 中是否出现
+  const serp = (auditResult.serpVisibility || 0) / 100 * 25
+
+  // 内容收录率（20%）：想表达的内容点被 AI 收录的比例
+  const included = auditResult.intendedCount
+    ? ((auditResult.includedCount || 0) / auditResult.intendedCount) * 20
+    : 0
+
+  // 信源质量（15%）：信源平均相关度
+  const sources = auditResult.sources || []
+  const avgRelevance = sources.length
+    ? sources.reduce((sum, s) => sum + (s.avgRelevance || 0), 0) / sources.length
+    : 0
+  const sourceQuality = (avgRelevance / 100) * 15
+
+  // 品牌多样性（10%）：直接引用的query占比
+  const directMentions = (auditResult.perQuery || []).filter(q => q.level === "direct").length
+  const totalQueries = auditResult.totalQueries || 1
+  const diversity = (directMentions / totalQueries) * 10
+
+  const score = Math.round(citation + serp + included + sourceQuality + diversity)
+  
+  return {
+    score: Math.min(100, Math.max(0, score)),
+    grade: score >= 80 ? "A" : score >= 60 ? "B" : score >= 40 ? "C" : "D",
+    breakdown: {
+      citation: { label: "AI 引用率", score: Math.round(citation), weight: 30, value: auditResult.aiCitationRate || 0 },
+      serp: { label: "搜索可见度", score: Math.round(serp), weight: 25, value: auditResult.serpVisibility || 0 },
+      included: { label: "内容收录率", score: Math.round(included), weight: 20, value: included > 0 ? Math.round((auditResult.includedCount || 0) / auditResult.intendedCount * 100) : 0 },
+      sourceQuality: { label: "信源质量", score: Math.round(sourceQuality), weight: 15, value: Math.round(avgRelevance) },
+      diversity: { label: "直接引用率", score: Math.round(diversity), weight: 10, value: Math.round(directMentions / totalQueries * 100) },
+    },
+  }
+}
+
+// ── v2.5 自动内容生成（检测到引用差距 → 生成优化页面）──
+export async function aiGenerateGeoContent({ query, brand, domain, missing, competitors = [] }) {
+  const system = "你是 GEO（生成引擎优化）内容专家。基于 Princeton 9 大策略（引用权威来源、结构化数据、FAQ、引用统计数据、权威背书、简洁格式、含引用链接、独特术语、流畅可读），生成一篇专门面向 AI 搜索引擎优化的内容页面。只输出 JSON。"
+  
+  const user = `目标 Query：${query}
+品牌：${brand}${domain ? `\n域名：${domain}` : ""}
+当前差距：${missing || "该品牌在 AI 回答中未被引用"}
+${competitors.length ? `竞品（已被 AI 引用）：${competitors.join("、")}` : ""}
+
+请生成一篇面向 AI 搜索引擎（如 Perplexity、Google AI Overview）优化的内容页面。
+
+要求：
+1. 使用 Princeton 9 大策略全覆盖
+2. 使用「答案先行」结构（TL;DR → 直接回答 → 详细展开）
+3. 包含 H2 问题格式的 FAQ 模块
+4. 引用 2-3 个权威数据/统计
+5. 包含 Schema JSON-LD 标记
+6. 自然融入品牌信息，不过度推销
+
+返回 JSON（中文）：
+{
+  "pageTitle": "页面标题（含 Query + 品牌名）",
+  "metaDescription": "meta description（120-160字，含品牌+关键词）",
+  "tlDr": "30 字以内的核心答案摘要",
+  "sections": [
+    {"type": "answer", "headline": "直接回答", "content": "..."},
+    {"type": "detail", "headline": "详细分析", "content": "..."},
+    {"type": "stats", "headline": "数据支撑", "content": "...", "source": "数据来源"},
+    {"type": "comparison", "headline": "对比分析", "content": "..."},
+    {"type": "faq", "headline": "常见问题", "items": [{"q":"...","a":"..."}]}
+  ],
+  "schema": {"@type": "Article", "headline": "...", "author": {"@type": "Organization", "name": "${brand}"}},
+  "keywordDensity": {"关键词": "密度%"},
+  "strategyCheck": ["应用的 Princeton 策略列表"]
+}`
+
+  const json = await chatJson({ system, user, temperature: 0.5, maxTokens: 4096 })
+  return json
+}
+
