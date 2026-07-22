@@ -17,6 +17,8 @@ import { scoreSources } from "./scorer.mjs"
 import { getMetrics, seedDemoData } from "./metrics.mjs"
 import { getSchedule, updateSchedule, getLogs, setAuditCallback, initScheduler } from "./scheduler.mjs"
 import { signToken, signRefreshToken, verifyToken, authenticateUser, getUserById, setUserPassword, authMiddleware, requireRole, listUsersSafe } from "./auth.mjs"
+import { checkRateLimit, checkAIRateLimit, getDailyUsage, getAllUsage } from "./ratelimit.mjs"
+import { createBackup, listBackups, restoreBackup, deleteBackup, startAutoBackup } from "./backup.mjs"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DIST = join(__dirname, "..", "dist")
@@ -182,6 +184,48 @@ const server = createServer(async (req, res) => {
         return sendJson(res, 200, { ok: true, data: users })
       }
 
+      // ── 用量统计 ──
+      if (pathname === "/api/usage" && req.method === "GET") {
+        const auth = authMiddleware(req)
+        if (!auth) return sendJson(res, 401, { ok: false, error: "未登录" })
+        const usage = getDailyUsage(auth.id)
+        const role = auth.role || "编辑"
+        const caps = { "管理员": 500, "编辑": 100, "只读": 30 }
+        usage.dailyCap = caps[role] || 50
+        usage.remaining = Math.max(0, usage.dailyCap - usage.calls)
+        return sendJson(res, 200, { ok: true, data: usage })
+      }
+
+      // ── 数据备份管理 ──
+      const backupMatch = pathname.match(/^\/api\/backups\/([^/]+)(\/restore)?$/)
+      if (pathname === "/api/backups" && req.method === "GET") {
+        const auth = authMiddleware(req)
+        if (!auth || !requireRole(auth, ["管理员"])) return sendJson(res, 403, { ok: false, error: "仅管理员可管理备份" })
+        return sendJson(res, 200, { ok: true, data: listBackups() })
+      }
+      if (pathname === "/api/backups" && req.method === "POST") {
+        const auth = authMiddleware(req)
+        if (!auth || !requireRole(auth, ["管理员"])) return sendJson(res, 403, { ok: false, error: "仅管理员可管理备份" })
+        const result = createBackup("manual")
+        return sendJson(res, result.ok ? 200 : 500, result)
+      }
+      if (backupMatch && req.method === "POST") {
+        const auth = authMiddleware(req)
+        if (!auth || !requireRole(auth, ["管理员"])) return sendJson(res, 403, { ok: false, error: "仅管理员可管理备份" })
+        // restore: /api/backups/{name}/restore
+        if (pathname.endsWith("/restore")) {
+          const result = restoreBackup(backupMatch[1])
+          return sendJson(res, result.ok ? 200 : 400, result)
+        }
+        return sendJson(res, 404, { ok: false, error: "未知操作" })
+      }
+      if (backupMatch && req.method === "DELETE") {
+        const auth = authMiddleware(req)
+        if (!auth || !requireRole(auth, ["管理员"])) return sendJson(res, 403, { ok: false, error: "仅管理员可管理备份" })
+        const result = deleteBackup(backupMatch[1])
+        return sendJson(res, result.ok ? 200 : 400, result)
+      }
+
       // ---- 客户项目 CRUD（纯存储，不需要 AI key）----
       if (pathname === "/api/projects" && req.method === "GET") {
         return sendJson(res, 200, { ok: true, data: await listProjects() })
@@ -289,7 +333,22 @@ const server = createServer(async (req, res) => {
         })
       }
 
+      // ── 限流辅助 ──
+      function checkAILimit() {
+        const auth = authMiddleware(req)
+        if (auth) {
+          const limit = checkAIRateLimit(auth)
+          if (!limit.allowed) {
+            sendJson(res, 429, { ok: false, error: limit.reason, retryAfter: limit.retryAfter, dailyCap: limit.dailyCap, used: limit.used })
+            return false
+          }
+        }
+        return true
+      }
+
+      // ── AI 分析 ──
       if (pathname === "/api/ai/analyze" && req.method === "POST") {
+        if (!checkAILimit()) return
         const body = await readBody(req)
         if (!body.text || !String(body.text).trim())
           return sendJson(res, 400, { ok: false, error: "缺少 text" })
@@ -298,6 +357,7 @@ const server = createServer(async (req, res) => {
       }
 
       if (pathname === "/api/ai/rewrite" && req.method === "POST") {
+        if (!checkAILimit()) return
         const body = await readBody(req)
         if (!body.text || !String(body.text).trim())
           return sendJson(res, 400, { ok: false, error: "缺少 text" })
@@ -313,8 +373,9 @@ const server = createServer(async (req, res) => {
         return sendJson(res, 200, { ok: true, data })
       }
 
-      // 真·GEO 引用审计：RAG 式搜索 → LLM 综合 → 品牌可见度检测
+      // 真·GEO 引用审计
       if (pathname === "/api/geo/audit" && req.method === "POST") {
+        if (!checkAILimit()) return
         const body = await readBody(req)
         if (!body.brand || !String(body.brand).trim())
           return sendJson(res, 400, { ok: false, error: "缺少 brand" })
@@ -446,6 +507,7 @@ const server = createServer(async (req, res) => {
 })
 
 initScheduler()
+startAutoBackup()
 server.listen(PORT, () => {
   console.log(`[GEO AI] 服务已启动: http://localhost:${PORT}`)
   console.log(`[GEO AI] 文字模型: ${isConfigured() ? "已就绪 ✅" : "未配置 ⚠️"} | 供应商 ${CONFIG.provider} | 模型 ${CONFIG.model} | ${CONFIG.baseUrl}`)
